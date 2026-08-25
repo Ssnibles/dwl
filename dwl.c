@@ -2234,6 +2234,8 @@ resize(Client *c, struct wlr_box geo, int interact)
 	c->geom = geo;
 	applybounds(c, bbox);
 
+	client_get_clip(c, &clip);
+
 	/* Update scene-graph, including borders */
 	wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
 	wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
@@ -2241,7 +2243,7 @@ resize(Client *c, struct wlr_box geo, int interact)
 		wlr_scene_rect_set_size(c->border, c->geom.width, c->geom.height);
 		wlr_scene_node_set_position(&c->border->node, 0, 0);
 
-		/* Set corner radius on background border and inner window buffers */
+		/* Set corner radius on background border */
 		radius = (c->isfullscreen || c->bw == 0) ? 0 : (int)corner_radius;
 		wlr_scene_rect_set_corner_radius(c->border, radius, CORNER_LOCATION_ALL);
 	} else {
@@ -2254,7 +2256,6 @@ resize(Client *c, struct wlr_box geo, int interact)
 	/* this is a no-op if size hasn't changed */
 	c->resize = client_set_size(c, c->geom.width - 2 * c->bw,
 			c->geom.height - 2 * c->bw);
-	client_get_clip(c, &clip);
 	wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
 }
 
