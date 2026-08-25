@@ -1152,8 +1152,11 @@ createpointer(struct wlr_pointer *pointer)
 			libinput_device_config_tap_set_button_map(device, button_map);
 		}
 
-		if (libinput_device_config_scroll_has_natural_scroll(device))
-			libinput_device_config_scroll_set_natural_scroll_enabled(device, natural_scrolling);
+		if (libinput_device_config_scroll_has_natural_scroll(device)) {
+			int is_touchpad = libinput_device_config_tap_get_finger_count(device) > 0;
+			libinput_device_config_scroll_set_natural_scroll_enabled(
+					device, is_touchpad ? natural_scrolling : mouse_natural_scrolling);
+		}
 
 		if (libinput_device_config_dwt_is_available(device))
 			libinput_device_config_dwt_set_enabled(device, disable_while_typing);
