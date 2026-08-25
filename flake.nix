@@ -27,6 +27,8 @@
             buildInputs = with pkgs; [
               wayland
               wlroots_0_19
+              scenefx
+              libGL
               wayland-protocols
               libinput
               libxkbcommon

@@ -45,7 +45,9 @@
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_primary_selection_v1.h>
 #include <wlr/types/wlr_relative_pointer_v1.h>
-#include <wlr/types/wlr_scene.h>
+#include <scenefx/render/fx_renderer/fx_renderer.h>
+#include <scenefx/types/wlr_scene.h>
+#include <scenefx/types/fx/corner_location.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_server_decoration.h>
@@ -108,7 +110,7 @@ typedef struct {
 
 	Monitor *mon;
 	struct wlr_scene_tree *scene;
-	struct wlr_scene_rect *border[4]; /* top, bottom, left, right */
+	struct wlr_scene_rect *border; /* background border rect */
 	struct wlr_scene_tree *scene_surface;
 	struct wl_list link;
 	struct wl_list flink;
@@ -1768,11 +1770,10 @@ mapnotify(struct wl_listener *listener, void *data)
 		goto unset_fullscreen;
 	}
 
-	for (i = 0; i < 4; i++) {
-		c->border[i] = wlr_scene_rect_create(c->scene, 0, 0,
-				c->isurgent ? urgentcolor : bordercolor);
-		c->border[i]->node.data = c;
-	}
+	c->border = wlr_scene_rect_create(c->scene, 0, 0,
+			c->isurgent ? urgentcolor : bordercolor);
+	c->border->node.data = c;
+	wlr_scene_node_place_below(&c->border->node, &c->scene_surface->node);
 
 	/* Initialize client geometry with room for border */
 	client_set_tiled(c, WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT | WLR_EDGE_RIGHT);
@@ -1826,11 +1827,19 @@ monocle(Monitor *m)
 {
 	Client *c;
 	int n = 0;
+	int g = (int)gappx;
+	struct wlr_box gbox;
 
 	wl_list_for_each(c, &clients, link) {
 		if (!VISIBLEON(c, m) || c->isfloating || c->isfullscreen)
 			continue;
-		resize(c, m->w, 0);
+		gbox = (struct wlr_box){
+			.x = m->w.x + g,
+			.y = m->w.y + g,
+			.width = m->w.width - 2 * g,
+			.height = m->w.height - 2 * g,
+		};
+		resize(c, gbox, 0);
 		n++;
 	}
 	if (n)
@@ -2203,11 +2212,19 @@ requestmonstate(struct wl_listener *listener, void *data)
 	updatemons(NULL, NULL);
 }
 
+static void
+setcorner_radius_cb(struct wlr_scene_buffer *buffer, int sx, int sy, void *data)
+{
+	int radius = *(int *)data;
+	wlr_scene_buffer_set_corner_radius(buffer, radius, CORNER_LOCATION_ALL);
+}
+
 void
 resize(Client *c, struct wlr_box geo, int interact)
 {
 	struct wlr_box *bbox;
 	struct wlr_box clip;
+	int radius;
 
 	if (!c->mon || !client_surface(c)->mapped)
 		return;
@@ -2221,13 +2238,19 @@ resize(Client *c, struct wlr_box geo, int interact)
 	/* Update scene-graph, including borders */
 	wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
 	wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
-	wlr_scene_rect_set_size(c->border[0], c->geom.width, c->bw);
-	wlr_scene_rect_set_size(c->border[1], c->geom.width, c->bw);
-	wlr_scene_rect_set_size(c->border[2], c->bw, c->geom.height - 2 * c->bw);
-	wlr_scene_rect_set_size(c->border[3], c->bw, c->geom.height - 2 * c->bw);
-	wlr_scene_node_set_position(&c->border[1]->node, 0, c->geom.height - c->bw);
-	wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
-	wlr_scene_node_set_position(&c->border[3]->node, c->geom.width - c->bw, c->bw);
+	if (c->border) {
+		wlr_scene_rect_set_size(c->border, c->geom.width, c->geom.height);
+		wlr_scene_node_set_position(&c->border->node, 0, 0);
+
+		/* Set corner radius on background border and inner window buffers */
+		radius = (c->isfullscreen || c->bw == 0) ? 0 : (int)corner_radius;
+		wlr_scene_rect_set_corner_radius(c->border, radius, CORNER_LOCATION_ALL);
+	} else {
+		radius = 0;
+	}
+
+	int inner_radius = MAX(0, radius - (int)c->bw);
+	wlr_scene_node_for_each_buffer(&c->scene_surface->node, setcorner_radius_cb, &inner_radius);
 
 	/* this is a no-op if size hasn't changed */
 	c->resize = client_set_size(c, c->geom.width - 2 * c->bw,
@@ -2479,8 +2502,9 @@ setup(void)
 	 * can also specify a renderer using the WLR_RENDERER env var.
 	 * The renderer is responsible for defining the various pixel formats it
 	 * supports for shared memory, this configures that for clients. */
-	if (!(drw = wlr_renderer_autocreate(backend)))
-		die("couldn't create renderer");
+	if (!(drw = fx_renderer_create(backend)))
+		if (!(drw = wlr_renderer_autocreate(backend)))
+			die("couldn't create renderer");
 	wl_signal_add(&drw->events.lost, &gpu_reset);
 
 	/* Create shm, drm and linux_dmabuf interfaces by ourselves.
@@ -2715,7 +2739,9 @@ void
 tile(Monitor *m)
 {
 	unsigned int mw, my, ty;
-	int i, n = 0;
+	int i, n = 0, nm, ns;
+	int g = (int)gappx;
+	int mx, mw_final, sx, sw_final;
 	Client *c;
 
 	wl_list_for_each(c, &clients, link)
@@ -2724,22 +2750,42 @@ tile(Monitor *m)
 	if (n == 0)
 		return;
 
-	if (n > m->nmaster)
-		mw = m->nmaster ? (int)roundf(m->w.width * m->mfact) : 0;
-	else
+	nm = MIN(n, m->nmaster);
+	ns = n - nm;
+
+	if (ns > 0 && nm > 0) {
+		mw = (int)roundf((m->w.width - g) * m->mfact);
+		mx = m->w.x + g;
+		mw_final = mw - g - g / 2;
+		sx = m->w.x + mw + g / 2;
+		sw_final = m->w.width - mw - g / 2 - g;
+	} else if (nm > 0) {
 		mw = m->w.width;
+		mx = m->w.x + g;
+		mw_final = m->w.width - 2 * g;
+		sx = mx;
+		sw_final = mw_final;
+	} else {
+		mw = 0;
+		mx = m->w.x + g;
+		mw_final = m->w.width - 2 * g;
+		sx = mx;
+		sw_final = mw_final;
+	}
+
 	i = my = ty = 0;
 	wl_list_for_each(c, &clients, link) {
 		if (!VISIBLEON(c, m) || c->isfloating || c->isfullscreen)
 			continue;
 		if (i < m->nmaster) {
-			resize(c, (struct wlr_box){.x = m->w.x, .y = m->w.y + my, .width = mw,
-				.height = (m->w.height - my) / (MIN(n, m->nmaster) - i)}, 0);
-			my += c->geom.height;
+			int h = (m->w.height - my - g * (nm - i + 1)) / (nm - i);
+			resize(c, (struct wlr_box){.x = mx, .y = m->w.y + my + g, .width = mw_final, .height = h}, 0);
+			my += h + g;
 		} else {
-			resize(c, (struct wlr_box){.x = m->w.x + mw, .y = m->w.y + ty,
-				.width = m->w.width - mw, .height = (m->w.height - ty) / (n - i)}, 0);
-			ty += c->geom.height;
+			int k = i - m->nmaster;
+			int h = (m->w.height - ty - g * (ns - k + 1)) / (ns - k);
+			resize(c, (struct wlr_box){.x = sx, .y = m->w.y + ty + g, .width = sw_final, .height = h}, 0);
+			ty += h + g;
 		}
 		i++;
 	}
