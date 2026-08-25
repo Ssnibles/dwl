@@ -45,6 +45,42 @@
         }
       );
 
+      apps = forAllSystems (system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          applyScript = pkgs.writeShellApplication {
+            name = "dwl-apply";
+            runtimeInputs = with pkgs; [ git coreutils gawk ];
+            text = ''
+              set -euo pipefail
+              NIXCONFIG_DIR="/home/josh/NixConfig"
+              DWL_DIR="$(pwd)"
+              HOST="''${NIXOS_HOST:-$(hostname)}"
+
+              echo "==> Staging NixOS config changes in $NIXCONFIG_DIR..."
+              git -C "$NIXCONFIG_DIR" add -A
+
+              echo "==> Rebuilding NixOS host '$HOST' with local dwl override..."
+              sudo nixos-rebuild switch --flake "$NIXCONFIG_DIR#$HOST" --override-input dwl "$DWL_DIR"
+
+              GEN=$(nixos-rebuild list-generations 2>/dev/null | awk 'NR==2 {print $1}' || echo "unknown")
+              echo ""
+              echo "✔ NixOS rebuild completed successfully! (Generation $GEN)"
+              echo "--> DWL changes applied! Exit your current session and log back in to use the new build."
+            '';
+          };
+        in {
+          default = {
+            type = "app";
+            program = "${applyScript}/bin/dwl-apply";
+          };
+          apply = {
+            type = "app";
+            program = "${applyScript}/bin/dwl-apply";
+          };
+        }
+      );
+
       devShells = forAllSystems (system:
         let
           pkgs = nixpkgs.legacyPackages.${system};

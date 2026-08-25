@@ -1,0 +1,1 @@
+/home/josh/NixConfig/rebuild.sh

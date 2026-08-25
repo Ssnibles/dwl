@@ -48,6 +48,10 @@ xdg-shell-protocol.h:
 
 config.h:
 	cp config.def.h $@
+
+apply:
+	nix run .#apply
+
 clean:
 	rm -f dwl *.o *-protocol.h
 
