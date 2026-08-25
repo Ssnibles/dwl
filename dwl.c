@@ -686,7 +686,16 @@ checkidleinhibitor(struct wlr_surface *exclude)
 	struct wlr_idle_inhibitor_v1 *inhibitor;
 	wl_list_for_each(inhibitor, &idle_inhibit_mgr->inhibitors, link) {
 		struct wlr_surface *surface = wlr_surface_get_root_surface(inhibitor->surface);
-		struct wlr_scene_tree *tree = surface->data;
+		Client *c = NULL;
+		LayerSurface *l = NULL;
+		struct wlr_scene_tree *tree = NULL;
+
+		toplevel_from_wlr_surface(surface, &c, &l);
+		if (c)
+			tree = c->scene;
+		else if (l)
+			tree = l->scene;
+
 		if (exclude != surface && (bypass_surface_visibility || (!tree
 				|| wlr_scene_node_coords(&tree->node, &unused_lx, &unused_ly)))) {
 			inhibited = 1;
@@ -2166,7 +2175,6 @@ rendermon(struct wl_listener *listener, void *data)
 	 * generally at the output's refresh rate (e.g. 60Hz). */
 	Monitor *m = wl_container_of(listener, m, frame);
 	Client *c;
-	struct wlr_output_state pending = {0};
 	struct timespec now;
 
 	/* Render if no XDG clients have an outstanding resize and are visible on
@@ -2176,13 +2184,18 @@ rendermon(struct wl_listener *listener, void *data)
 			goto skip;
 	}
 
-	wlr_scene_output_commit(m->scene_output, NULL);
+	/* Ensure damage ring includes whole output damage when a frame is needed,
+	 * preventing multi-monitor coordinate damage clipping and flickering on external displays. */
+	if (wlr_scene_output_needs_frame(m->scene_output))
+		wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
+
+	if (!wlr_scene_output_commit(m->scene_output, NULL))
+		return;
 
 skip:
 	/* Let clients know a frame has been rendered */
 	clock_gettime(CLOCK_MONOTONIC, &now);
 	wlr_scene_output_send_frame_done(m->scene_output, &now);
-	wlr_output_state_finish(&pending);
 }
 
 void
