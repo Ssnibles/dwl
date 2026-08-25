@@ -1744,7 +1744,6 @@ mapnotify(struct wl_listener *listener, void *data)
 	Client *p = NULL;
 	Client *w, *c = wl_container_of(listener, c, map);
 	Monitor *m;
-	int i;
 
 	/* Create scene tree for this client and its border */
 	c->scene = client_surface(c)->data = wlr_scene_tree_create(layers[LyrTile]);
@@ -1794,6 +1793,8 @@ mapnotify(struct wl_listener *listener, void *data)
 	} else {
 		applyrules(c);
 	}
+	if (c->isfloating)
+		resize(c, c->geom, 1);
 	printstatus();
 
 unset_fullscreen:
@@ -2224,7 +2225,7 @@ resize(Client *c, struct wlr_box geo, int interact)
 {
 	struct wlr_box *bbox;
 	struct wlr_box clip;
-	int radius;
+	int radius, inner_radius;
 
 	if (!c->mon || !client_surface(c)->mapped)
 		return;
@@ -2249,7 +2250,7 @@ resize(Client *c, struct wlr_box geo, int interact)
 		radius = 0;
 	}
 
-	int inner_radius = MAX(0, radius - (int)c->bw);
+	inner_radius = MAX(0, radius - (int)c->bw);
 	wlr_scene_node_for_each_buffer(&c->scene_surface->node, setcorner_radius_cb, &inner_radius);
 
 	/* this is a no-op if size hasn't changed */
