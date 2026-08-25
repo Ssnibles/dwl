@@ -486,13 +486,15 @@ applyrules(Client *c)
 	const Rule *r;
 	Monitor *mon = selmon, *m;
 
+	int isfloating = 0;
+
 	appid = client_get_appid(c);
 	title = client_get_title(c);
 
 	for (r = rules; r < END(rules); r++) {
 		if ((!r->title || strstr(title, r->title))
 				&& (!r->id || strstr(appid, r->id))) {
-			c->isfloating = r->isfloating;
+			isfloating = r->isfloating;
 			newtags |= r->tags;
 			i = 0;
 			wl_list_for_each(m, &mons, link) {
@@ -502,8 +504,9 @@ applyrules(Client *c)
 		}
 	}
 
-	c->isfloating |= client_is_float_type(c);
+	isfloating |= client_is_float_type(c);
 	setmon(c, mon, newtags);
+	setfloating(c, isfloating);
 }
 
 void
@@ -526,18 +529,13 @@ arrange(Monitor *m)
 
 	strncpy(m->ltsymbol, m->lt[m->sellt]->symbol, LENGTH(m->ltsymbol));
 
-	/* We move all clients (except fullscreen and unmanaged) to LyrTile while
-	 * in floating layout to avoid "real" floating clients be always on top */
+	/* We move all floating clients to LyrFloat so they are always on top of tiled ones */
 	wl_list_for_each(c, &clients, link) {
 		if (c->mon != m || c->scene->node.parent == layers[LyrFS])
 			continue;
 
 		wlr_scene_node_reparent(&c->scene->node,
-				(!m->lt[m->sellt]->arrange && c->isfloating)
-						? layers[LyrTile]
-						: (m->lt[m->sellt]->arrange && c->isfloating)
-								? layers[LyrFloat]
-								: c->scene->node.parent);
+				c->isfloating ? layers[LyrFloat] : layers[LyrTile]);
 	}
 
 	if (m->lt[m->sellt]->arrange)
@@ -1788,8 +1786,8 @@ mapnotify(struct wl_listener *listener, void *data)
 	 * we set the same tags and monitor as its parent.
 	 * If there is no parent, apply rules */
 	if ((p = client_get_parent(c))) {
-		c->isfloating = 1;
 		setmon(c, p->mon, p->tags);
+		setfloating(c, 1);
 	} else {
 		applyrules(c);
 	}
@@ -2359,13 +2357,21 @@ void
 setfloating(Client *c, int floating)
 {
 	Client *p = client_get_parent(c);
+	int was_floating = c->isfloating;
 	c->isfloating = floating;
-	/* If in floating layout do not change the client's layer */
-	if (!c->mon || !client_surface(c)->mapped || !c->mon->lt[c->mon->sellt]->arrange)
+	if (!c->mon || !client_surface(c)->mapped)
 		return;
 	wlr_scene_node_reparent(&c->scene->node, layers[c->isfullscreen ||
 			(p && p->isfullscreen) ? LyrFS
 			: c->isfloating ? LyrFloat : LyrTile]);
+	if (c->isfloating && !was_floating) {
+		struct wlr_box geom;
+		geom.width = (int)(c->mon->m.width * 0.60);
+		geom.height = (int)(c->mon->m.height * 0.60);
+		geom.x = c->mon->m.x + (c->mon->m.width - geom.width) / 2;
+		geom.y = c->mon->m.y + (c->mon->m.height - geom.height) / 2;
+		resize(c, geom, 0);
+	}
 	arrange(c->mon);
 	printstatus();
 }
