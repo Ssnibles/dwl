@@ -76,6 +76,24 @@ git push -u origin main
 
 ---
 
+## 📚 Learning & Architecture Resources
+
+If you are interested in Wayland compositors, windowing systems, and hacking on `dwl` / `wlroots`:
+
+### Key Architectural Concepts
+- **Window Geometry vs. Surface Buffers**: Wayland applications can render buffers larger than their visible window (e.g., client-side drop shadows or margins). The visible bounds are defined via `xdg_surface.set_window_geometry`. Subsurface tree clipping (`wlr_scene_subsurface_tree_set_clip`) ensures compositor borders remain crisp, uniform, and unaffected by client buffer overflow.
+- **Scene Graph Trees (`wlr_scene` / SceneFX)**: `dwl` organizes visual elements into hierarchical scene trees (`LyrTile`, `LyrFloat`, `LyrFS`, etc.). Surface trees handle window content, while `wlr_scene_rect` nodes render background borders with corner rounding.
+- **Tiling Mathematics**: Window layout is calculated deterministically in `tile()` by partitioning monitor coordinate boxes (`wlr_box`).
+
+### Recommended Learning Resources
+- **[The Wayland Book](https://wayland-book.com/)** by Drew DeVault – The definitive guide to the Wayland protocol, IPC architecture, objects, and event loops.
+- **[Wayland Explorer (wayland.app)](https://wayland.app)** – Interactive reference for standard Wayland protocols (`xdg-shell`, `layer-shell`, `fractional-scale-v1`, etc.).
+- **[wlroots & tinywl](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/master/tinywl)** – Minimal ~1,000 line C compositor demonstration for understanding compositor bootstrapping.
+- **[dwl Upstream Repository](https://codeberg.org/dwl/dwl)** – Official source code, issue tracker, and community patches for `dwl`.
+
+---
+
 ## 📄 Licence
 
 Licenced under the GPL-3.0 Licence (inherited from upstream dwl).
+
