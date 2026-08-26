@@ -262,11 +262,16 @@ extern struct wlr_relative_pointer_manager_v1 *relative_pointer_mgr;
 extern struct wlr_idle_notifier_v1 *idle_notifier;
 extern struct wlr_scene_tree *drag_icon;
 extern int locked;
+extern KeyboardGroup *kb_group;
+extern struct wl_event_loop *event_loop;
 
 /* function declarations */
 void checkidleinhibitor(struct wlr_surface *exclude);
+KeyboardGroup *createkeyboardgroup(void);
+void destroykeyboardgroup(struct wl_listener *listener, void *data);
 void focusclient(Client *c, int lift);
 Client *focustop(Monitor *m);
+int keybinding(uint32_t mods, xkb_keysym_t sym);
 void motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double dy, double dx_unaccel, double dy_unaccel);
 void pointerfocus(Client *c, struct wlr_surface *surface, double sx, double sy, uint32_t time);
 void printstatus(void);

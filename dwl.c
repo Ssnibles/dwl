@@ -5,6 +5,7 @@
 #include "rules.h"
 #include "layout.h"
 #include "cursor.h"
+#include "seat.h"
 
 
 /* function declarations */
@@ -26,8 +27,6 @@ static void commitnotify(struct wl_listener *listener, void *data);
 static void commitpopup(struct wl_listener *listener, void *data);
 static void createdecoration(struct wl_listener *listener, void *data);
 static void createidleinhibitor(struct wl_listener *listener, void *data);
-static void createkeyboard(struct wlr_keyboard *keyboard);
-static KeyboardGroup *createkeyboardgroup(void);
 static void createlayersurface(struct wl_listener *listener, void *data);
 static void createlocksurface(struct wl_listener *listener, void *data);
 static void createmon(struct wl_listener *listener, void *data);
@@ -47,7 +46,6 @@ static void destroylocksurface(struct wl_listener *listener, void *data);
 static void destroynotify(struct wl_listener *listener, void *data);
 static void destroypointerconstraint(struct wl_listener *listener, void *data);
 static void destroysessionlock(struct wl_listener *listener, void *data);
-static void destroykeyboardgroup(struct wl_listener *listener, void *data);
 static Monitor *dirtomon(enum wlr_direction dir);
 void dwindle(Monitor *m);
 void fibonacci(Monitor *m, int s);
@@ -60,10 +58,6 @@ static void gpureset(struct wl_listener *listener, void *data);
 static void handlesig(int signo);
 void incnmaster(const Arg *arg);
 static void inputdevice(struct wl_listener *listener, void *data);
-static int keybinding(uint32_t mods, xkb_keysym_t sym);
-static void keypress(struct wl_listener *listener, void *data);
-static void keypressmod(struct wl_listener *listener, void *data);
-static int keyrepeat(void *data);
 void killclient(const Arg *arg);
 static void locksession(struct wl_listener *listener, void *data);
 static void mapnotify(struct wl_listener *listener, void *data);
@@ -115,8 +109,6 @@ static void updatemons(struct wl_listener *listener, void *data);
 static void updatetitle(struct wl_listener *listener, void *data);
 static void urgent(struct wl_listener *listener, void *data);
 void view(const Arg *arg);
-static void virtualkeyboard(struct wl_listener *listener, void *data);
-static void virtualpointer(struct wl_listener *listener, void *data);
 Monitor *xytomon(double x, double y);
 void xytonode(double x, double y, struct wlr_surface **psurface,
 		Client **pc, LayerSurface **pl, double *nx, double *ny);
@@ -127,7 +119,7 @@ static pid_t child_pid = -1;
 int locked;
 static void *exclusive_focus;
 static struct wl_display *dpy;
-static struct wl_event_loop *event_loop;
+struct wl_event_loop *event_loop;
 static struct wlr_backend *backend;
 static struct wlr_scene *scene;
 struct wlr_scene_tree *layers[NUM_LAYERS];
@@ -166,7 +158,7 @@ static struct wlr_scene_rect *locked_bg;
 static struct wlr_session_lock_v1 *cur_lock;
 
 struct wlr_seat *seat;
-static KeyboardGroup *kb_group;
+KeyboardGroup *kb_group;
 unsigned int cursor_mode;
 Client *grabc;
 int grabcx, grabcy; /* client-relative */
@@ -578,53 +570,6 @@ createidleinhibitor(struct wl_listener *listener, void *data)
 }
 
 void
-createkeyboard(struct wlr_keyboard *keyboard)
-{
-	/* Set the keymap to match the group keymap */
-	wlr_keyboard_set_keymap(keyboard, kb_group->wlr_group->keyboard.keymap);
-
-	/* Add the new keyboard to the group */
-	wlr_keyboard_group_add_keyboard(kb_group->wlr_group, keyboard);
-}
-
-KeyboardGroup *
-createkeyboardgroup(void)
-{
-	KeyboardGroup *group = ecalloc(1, sizeof(*group));
-	struct xkb_context *context;
-	struct xkb_keymap *keymap;
-
-	group->wlr_group = wlr_keyboard_group_create();
-	group->wlr_group->data = group;
-
-	/* Prepare an XKB keymap and assign it to the keyboard group. */
-	context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-	if (!(keymap = xkb_keymap_new_from_names(context, &xkb_rules,
-				XKB_KEYMAP_COMPILE_NO_FLAGS)))
-		die("failed to compile keymap");
-
-	wlr_keyboard_set_keymap(&group->wlr_group->keyboard, keymap);
-	xkb_keymap_unref(keymap);
-	xkb_context_unref(context);
-
-	wlr_keyboard_set_repeat_info(&group->wlr_group->keyboard, repeat_rate, repeat_delay);
-
-	/* Set up listeners for keyboard events */
-	LISTEN(&group->wlr_group->keyboard.events.key, &group->key, keypress);
-	LISTEN(&group->wlr_group->keyboard.events.modifiers, &group->modifiers, keypressmod);
-
-	group->key_repeat_source = wl_event_loop_add_timer(event_loop, keyrepeat, group);
-
-	/* A seat can only have one keyboard, but this is a limitation of the
-	 * Wayland protocol - not wlroots. We assign all connected keyboards to the
-	 * same wlr_keyboard_group, which provides a single wlr_keyboard interface for
-	 * all of them. Set this combined wlr_keyboard as the seat keyboard.
-	 */
-	wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
-	return group;
-}
-
-void
 createlayersurface(struct wl_listener *listener, void *data)
 {
 	struct wlr_layer_surface_v1 *layer_surface = data;
@@ -976,18 +921,6 @@ destroysessionlock(struct wl_listener *listener, void *data)
 	destroylock(lock, 0);
 }
 
-void
-destroykeyboardgroup(struct wl_listener *listener, void *data)
-{
-	KeyboardGroup *group = wl_container_of(listener, group, destroy);
-	wl_event_source_remove(group->key_repeat_source);
-	wl_list_remove(&group->key.link);
-	wl_list_remove(&group->modifiers.link);
-	wl_list_remove(&group->destroy.link);
-	wlr_keyboard_group_destroy(group->wlr_group);
-	free(group);
-}
-
 Monitor *
 dirtomon(enum wlr_direction dir)
 {
@@ -1199,103 +1132,6 @@ inputdevice(struct wl_listener *listener, void *data)
 	if (!wl_list_empty(&kb_group->wlr_group->devices))
 		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
 	wlr_seat_set_capabilities(seat, caps);
-}
-
-int
-keybinding(uint32_t mods, xkb_keysym_t sym)
-{
-	/*
-	 * Here we handle compositor keybindings. This is when the compositor is
-	 * processing keys, rather than passing them on to the client for its own
-	 * processing.
-	 */
-	const Key *k;
-	for (k = keys; k < END(keys); k++) {
-		if (CLEANMASK(mods) == CLEANMASK(k->mod)
-				&& xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(k->keysym)
-				&& k->func) {
-			k->func(&k->arg);
-			return 1;
-		}
-	}
-	return 0;
-}
-
-void
-keypress(struct wl_listener *listener, void *data)
-{
-	int i;
-	/* This event is raised when a key is pressed or released. */
-	KeyboardGroup *group = wl_container_of(listener, group, key);
-	struct wlr_keyboard_key_event *event = data;
-
-	/* Translate libinput keycode -> xkbcommon */
-	uint32_t keycode = event->keycode + 8;
-	/* Get a list of keysyms based on the keymap for this keyboard */
-	const xkb_keysym_t *syms;
-	int nsyms = xkb_state_key_get_syms(
-			group->wlr_group->keyboard.xkb_state, keycode, &syms);
-
-	int handled = 0;
-	uint32_t mods = wlr_keyboard_get_modifiers(&group->wlr_group->keyboard);
-
-	wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-
-	/* On _press_ if there is no active screen locker,
-	 * attempt to process a compositor keybinding. */
-	if (!locked && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-		for (i = 0; i < nsyms; i++)
-			handled = keybinding(mods, syms[i]) || handled;
-	}
-
-	if (handled && group->wlr_group->keyboard.repeat_info.delay > 0) {
-		group->mods = mods;
-		group->keysyms = syms;
-		group->nsyms = nsyms;
-		wl_event_source_timer_update(group->key_repeat_source,
-				group->wlr_group->keyboard.repeat_info.delay);
-	} else {
-		group->nsyms = 0;
-		wl_event_source_timer_update(group->key_repeat_source, 0);
-	}
-
-	if (handled)
-		return;
-
-	wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
-	/* Pass unhandled keycodes along to the client. */
-	wlr_seat_keyboard_notify_key(seat, event->time_msec,
-			event->keycode, event->state);
-}
-
-void
-keypressmod(struct wl_listener *listener, void *data)
-{
-	/* This event is raised when a modifier key, such as shift or alt, is
-	 * pressed. We simply communicate this to the client. */
-	KeyboardGroup *group = wl_container_of(listener, group, modifiers);
-
-	wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
-	/* Send modifiers to the client. */
-	wlr_seat_keyboard_notify_modifiers(seat,
-			&group->wlr_group->keyboard.modifiers);
-}
-
-int
-keyrepeat(void *data)
-{
-	KeyboardGroup *group = data;
-	int i;
-	if (!group->nsyms || group->wlr_group->keyboard.repeat_info.rate <= 0)
-		return 0;
-
-	wl_event_source_timer_update(group->key_repeat_source,
-			1000 / group->wlr_group->keyboard.repeat_info.rate);
-
-	for (i = 0; i < group->nsyms; i++)
-		keybinding(group->mods, group->keysyms[i]);
-
-	return 0;
 }
 
 void
@@ -2354,31 +2190,6 @@ view(const Arg *arg)
 	focusclient(focustop(selmon), 1);
 	arrange(selmon);
 	printstatus();
-}
-
-void
-virtualkeyboard(struct wl_listener *listener, void *data)
-{
-	struct wlr_virtual_keyboard_v1 *kb = data;
-	/* virtual keyboards shouldn't share keyboard group */
-	KeyboardGroup *group = createkeyboardgroup();
-	/* Set the keymap to match the group keymap */
-	wlr_keyboard_set_keymap(&kb->keyboard, group->wlr_group->keyboard.keymap);
-	LISTEN(&kb->keyboard.base.events.destroy, &group->destroy, destroykeyboardgroup);
-
-	/* Add the new keyboard to the group */
-	wlr_keyboard_group_add_keyboard(group->wlr_group, &kb->keyboard);
-}
-
-void
-virtualpointer(struct wl_listener *listener, void *data)
-{
-	struct wlr_virtual_pointer_v1_new_pointer_event *event = data;
-	struct wlr_input_device *device = &event->new_pointer->pointer.base;
-
-	wlr_cursor_attach_input_device(cursor, device);
-	if (event->suggested_output)
-		wlr_cursor_map_input_to_output(cursor, device, event->suggested_output);
 }
 
 Monitor *
