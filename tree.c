@@ -418,26 +418,56 @@ void
 tree_resize_dir(const Arg *arg)
 {
 	Client *sel;
-	float delta = 0.05f;
+	float delta = 0.05f, f;
 	Node *target_node = NULL;
 	Node *curr;
+	int dir, is_horiz;
+	int is_right_half = 0, is_bottom_half = 0;
+	struct wlr_box ref_box;
+	double cx, cy;
 
 	if (!selmon || !arg || !selmon->active_workspace)
 		return;
 
 	sel = focustop(selmon);
-	if (!sel || !sel->node)
+	if (!sel)
 		return;
 
-	int is_horiz = (arg->i == WLR_DIRECTION_LEFT || arg->i == WLR_DIRECTION_RIGHT);
+	if (sel->isfloating) {
+		int step = 40;
+		struct wlr_box g = sel->geom;
+		switch (arg->i) {
+		case WLR_DIRECTION_RIGHT:
+			g.width += step;
+			break;
+		case WLR_DIRECTION_LEFT:
+			g.width = MAX(100, g.width - step);
+			break;
+		case WLR_DIRECTION_DOWN:
+			g.height += step;
+			break;
+		case WLR_DIRECTION_UP:
+			g.height = MAX(100, g.height - step);
+			break;
+		}
+		resize(sel, g, 1);
+		return;
+	}
 
-	/* Traverse upward to find the node participating in the requested split orientation */
-	for (curr = sel->node; curr; curr = curr->parent) {
-		if (curr->parent && curr->parent->split_type != SPLIT_NONE) {
-			if ((is_horiz && curr->parent->split_type == SPLIT_HORIZONTAL) ||
-			    (!is_horiz && curr->parent->split_type == SPLIT_VERTICAL)) {
-				target_node = curr;
-				break;
+	if (!sel->node)
+		return;
+
+	dir = arg->i;
+	is_horiz = (dir == WLR_DIRECTION_LEFT || dir == WLR_DIRECTION_RIGHT);
+
+	if (selmon->lt[selmon->sellt]->arrange == tree_layout) {
+		for (curr = sel->node; curr; curr = curr->parent) {
+			if (curr->parent && curr->parent->split_type != SPLIT_NONE) {
+				if ((is_horiz && curr->parent->split_type == SPLIT_HORIZONTAL) ||
+				    (!is_horiz && curr->parent->split_type == SPLIT_VERTICAL)) {
+					target_node = curr;
+					break;
+				}
 			}
 		}
 	}
@@ -445,45 +475,49 @@ tree_resize_dir(const Arg *arg)
 	if (!target_node)
 		target_node = sel->node;
 
-	struct wlr_box ref_box = (target_node->parent && target_node->parent->type != NODE_ROOT && target_node->parent->geom.width > 0)
+	ref_box = (target_node->parent && target_node->parent->type != NODE_ROOT && target_node->parent->geom.width > 0)
 		? target_node->parent->geom
 		: selmon->w;
 
-	double cx = (target_node->geom.width > 0) ? (target_node->geom.x + target_node->geom.width / 2.0) : (sel->geom.x + sel->geom.width / 2.0);
-	double cy = (target_node->geom.height > 0) ? (target_node->geom.y + target_node->geom.height / 2.0) : (sel->geom.y + sel->geom.height / 2.0);
+	cx = (target_node->geom.width > 0)
+		? (target_node->geom.x + target_node->geom.width / 2.0)
+		: (sel->geom.x + sel->geom.width / 2.0);
+	cy = (target_node->geom.height > 0)
+		? (target_node->geom.y + target_node->geom.height / 2.0)
+		: (sel->geom.y + sel->geom.height / 2.0);
 
-	int is_right_half = cx > (ref_box.x + ref_box.width / 2.0);
-	int is_bottom_half = cy > (ref_box.y + ref_box.height / 2.0);
+	is_right_half = (cx > (ref_box.x + ref_box.width / 2.0));
+	is_bottom_half = (cy > (ref_box.y + ref_box.height / 2.0));
 
-	switch (arg->i) {
-	case WLR_DIRECTION_LEFT:
-		target_node->ratio_h += is_right_half ? delta : -delta;
-		break;
-	case WLR_DIRECTION_RIGHT:
-		target_node->ratio_h += is_right_half ? -delta : delta;
-		break;
-	case WLR_DIRECTION_UP:
-		target_node->ratio_v += is_bottom_half ? delta : -delta;
-		break;
-	case WLR_DIRECTION_DOWN:
-		target_node->ratio_v += is_bottom_half ? -delta : delta;
-		break;
-	}
+	if (is_horiz) {
+		if (dir == WLR_DIRECTION_LEFT)
+			target_node->ratio_h += is_right_half ? delta : -delta;
+		else
+			target_node->ratio_h += is_right_half ? -delta : delta;
 
-	if (target_node->ratio_h < 0.1f) target_node->ratio_h = 0.1f;
-	if (target_node->ratio_h > 10.0f) target_node->ratio_h = 10.0f;
-	if (target_node->ratio_v < 0.1f) target_node->ratio_v = 0.1f;
-	if (target_node->ratio_v > 10.0f) target_node->ratio_v = 10.0f;
-	target_node->ratio = (target_node->ratio_h + target_node->ratio_v) / 2.0f;
+		if (target_node->ratio_h < 0.1f) target_node->ratio_h = 0.1f;
+		if (target_node->ratio_h > 10.0f) target_node->ratio_h = 10.0f;
 
-	if (selmon->lt[selmon->sellt]->arrange == tile || selmon->lt[selmon->sellt]->arrange == master_stack) {
-		if (arg->i == WLR_DIRECTION_LEFT || arg->i == WLR_DIRECTION_RIGHT) {
-			float f = selmon->mfact + ((arg->i == WLR_DIRECTION_RIGHT && !is_right_half) || (arg->i == WLR_DIRECTION_LEFT && is_right_half) ? delta : -delta);
+		if (selmon->lt[selmon->sellt]->arrange == tile || selmon->lt[selmon->sellt]->arrange == master_stack) {
+			if (dir == WLR_DIRECTION_RIGHT)
+				f = selmon->mfact + delta;
+			else
+				f = selmon->mfact - delta;
+
 			if (f >= 0.1f && f <= 0.9f)
 				selmon->mfact = f;
 		}
+	} else {
+		if (dir == WLR_DIRECTION_UP)
+			target_node->ratio_v += is_bottom_half ? delta : -delta;
+		else
+			target_node->ratio_v += is_bottom_half ? -delta : delta;
+
+		if (target_node->ratio_v < 0.1f) target_node->ratio_v = 0.1f;
+		if (target_node->ratio_v > 10.0f) target_node->ratio_v = 10.0f;
 	}
 
+	target_node->ratio = (target_node->ratio_h + target_node->ratio_v) / 2.0f;
 	arrange(selmon);
 }
 
