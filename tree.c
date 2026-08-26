@@ -13,6 +13,14 @@
 #include "tree.h"
 #include "workspace.h"
 
+static inline float
+clamp_ratio(float r)
+{
+	if (r < 0.1f) return 0.1f;
+	if (r > 10.0f) return 10.0f;
+	return r;
+}
+
 Node *
 node_create(NodeType type, Workspace *ws)
 {
@@ -36,6 +44,17 @@ node_insert_child(Node *parent, Node *child)
 	child->ws = parent->ws;
 	wl_list_remove(&child->link);
 	wl_list_insert(parent->children.prev, &child->link);
+}
+
+void
+node_insert_after(Node *sibling, Node *child)
+{
+	if (!sibling || !child)
+		return;
+	child->parent = sibling->parent;
+	child->ws = sibling->ws;
+	wl_list_remove(&child->link);
+	wl_list_insert(&sibling->link, &child->link);
 }
 
 int
@@ -64,7 +83,6 @@ node_insert_client(Workspace *ws, Client *c)
 	leaf = node_create(NODE_LEAF, ws);
 	leaf->client = c;
 	c->node = leaf;
-	c->ws = ws;
 
 	/* Case 1: Empty workspace root */
 	if (wl_list_empty(&ws->root->children)) {
@@ -73,7 +91,7 @@ node_insert_client(Workspace *ws, Client *c)
 		return leaf;
 	}
 
-	/* Case 2: Identify focus reference node (O(1) tail access) */
+	/* Case 2: Identify focus reference node (O(1) access) */
 	focus_ref = (ws->focused_node && ws->focused_node != ws->root) ? ws->focused_node : NULL;
 	if (!focus_ref) {
 		focus_ref = wl_container_of(ws->root->children.prev, focus_ref, link);
@@ -95,21 +113,47 @@ node_insert_client(Workspace *ws, Client *c)
 	if (target_parent->split_type != desired_split && focus_ref->type == NODE_LEAF) {
 		Node *container = node_create(NODE_CONTAINER, ws);
 		container->split_type = desired_split;
-		container->parent = target_parent;
 
-		wl_list_insert(&focus_ref->link, &container->link);
-		wl_list_remove(&focus_ref->link);
-
+		node_insert_after(focus_ref, container);
 		node_insert_child(container, focus_ref);
 		node_insert_child(container, leaf);
 	} else {
-		leaf->parent = target_parent;
-		leaf->ws = ws;
-		wl_list_insert(&focus_ref->link, &leaf->link);
+		node_insert_after(focus_ref, leaf);
 	}
 
 	ws->focused_node = leaf;
 	return leaf;
+}
+
+static void
+node_collapse_container(Node *container)
+{
+	Node *only_child, *gparent;
+
+	if (!container || container->type != NODE_CONTAINER || container->type == NODE_ROOT)
+		return;
+
+	if (wl_list_empty(&container->children) || container->children.next != container->children.prev)
+		return;
+
+	only_child = wl_container_of(container->children.next, only_child, link);
+	gparent = container->parent;
+	if (!gparent)
+		return;
+
+	wl_list_insert(&container->link, &only_child->link);
+	wl_list_remove(&container->link);
+	wl_list_init(&container->link);
+
+	only_child->parent = gparent;
+
+	if (container->ws && container->ws->focused_node == container)
+		container->ws->focused_node = only_child;
+
+	free(container);
+
+	if (gparent->type == NODE_CONTAINER)
+		node_collapse_container(gparent);
 }
 
 void
@@ -154,42 +198,23 @@ node_remove(Node *node)
 
 	free(node);
 
-	/* If parent container is empty and not root, prune parent */
-	if (parent && parent->type == NODE_CONTAINER && wl_list_empty(&parent->children)) {
-		node_remove(parent);
-	}
-	/* If parent container has only 1 child and is not root, collapse parent (O(1) check) */
-	else if (parent && parent->type == NODE_CONTAINER && parent->type != NODE_ROOT &&
-	         !wl_list_empty(&parent->children) && parent->children.next == parent->children.prev) {
-		Node *only_child = wl_container_of(parent->children.next, only_child, link);
-		Node *gparent = parent->parent;
-		if (gparent) {
-			wl_list_insert(&parent->link, &only_child->link);
-			wl_list_remove(&parent->link);
-			wl_list_init(&parent->link);
-			only_child->parent = gparent;
-			if (ws && ws->focused_node == parent)
-				ws->focused_node = only_child;
-			free(parent);
-		}
+	if (parent && parent->type == NODE_CONTAINER) {
+		if (wl_list_empty(&parent->children))
+			node_remove(parent);
+		else
+			node_collapse_container(parent);
 	}
 }
 
 Node *
 node_find_client(Node *root, Client *c)
 {
-	Node *child, *found;
-
-	if (!root || !c)
+	if (!root || !c || !c->node)
 		return NULL;
-	if (root->client == c)
-		return root;
 
-	wl_list_for_each(child, &root->children, link) {
-		found = node_find_client(child, c);
-		if (found)
-			return found;
-	}
+	if (node_is_ancestor(root, c->node))
+		return c->node;
+
 	return NULL;
 }
 
@@ -271,8 +296,9 @@ node_arrange_recursive(Node *node, struct wlr_box box)
 	}
 
 	wl_list_for_each(child, &node->children, link) {
+		float r;
 		child_count++;
-		float r = (node->split_type == SPLIT_HORIZONTAL) ? child->ratio_h : child->ratio_v;
+		r = (node->split_type == SPLIT_HORIZONTAL) ? child->ratio_h : child->ratio_v;
 		total_ratio += (r > 0.05f) ? r : 1.0f;
 	}
 
@@ -333,12 +359,8 @@ tree_resize_node(Node *node, float delta)
 {
 	if (!node)
 		return;
-	node->ratio_h += delta;
-	node->ratio_v += delta;
-	if (node->ratio_h < 0.1f) node->ratio_h = 0.1f;
-	if (node->ratio_h > 10.0f) node->ratio_h = 10.0f;
-	if (node->ratio_v < 0.1f) node->ratio_v = 0.1f;
-	if (node->ratio_v > 10.0f) node->ratio_v = 10.0f;
+	node->ratio_h = clamp_ratio(node->ratio_h + delta);
+	node->ratio_v = clamp_ratio(node->ratio_v + delta);
 }
 
 void
@@ -483,8 +505,7 @@ tree_resize_dir(const Arg *arg)
 		else
 			target_node->ratio_h += is_right_half ? -delta : delta;
 
-		if (target_node->ratio_h < 0.1f) target_node->ratio_h = 0.1f;
-		if (target_node->ratio_h > 10.0f) target_node->ratio_h = 10.0f;
+		target_node->ratio_h = clamp_ratio(target_node->ratio_h);
 
 		if (selmon->lt[selmon->sellt]->arrange == tile || selmon->lt[selmon->sellt]->arrange == master_stack) {
 			if (dir == WLR_DIRECTION_RIGHT)
@@ -501,8 +522,7 @@ tree_resize_dir(const Arg *arg)
 		else
 			target_node->ratio_v += is_bottom_half ? -delta : delta;
 
-		if (target_node->ratio_v < 0.1f) target_node->ratio_v = 0.1f;
-		if (target_node->ratio_v > 10.0f) target_node->ratio_v = 10.0f;
+		target_node->ratio_v = clamp_ratio(target_node->ratio_v);
 	}
 
 	arrange(selmon);
