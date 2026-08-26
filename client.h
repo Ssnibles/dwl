@@ -425,4 +425,13 @@ void createdecoration(struct wl_listener *listener, void *data);
 void destroydecoration(struct wl_listener *listener, void *data);
 void setdecorationmode(struct wl_listener *listener, void *data);
 
+#ifdef XWAYLAND
+void activatex11(struct wl_listener *listener, void *data);
+void associatex11(struct wl_listener *listener, void *data);
+void configurex11(struct wl_listener *listener, void *data);
+void createnotifyx11(struct wl_listener *listener, void *data);
+void dissociatex11(struct wl_listener *listener, void *data);
+void sethints(struct wl_listener *listener, void *data);
+#endif
+
 #endif /* CLIENT_H */
