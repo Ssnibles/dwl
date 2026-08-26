@@ -31,9 +31,8 @@ typedef struct Node Node;
 struct Node {
 	NodeType type;             /* NODE_ROOT, NODE_CONTAINER, or NODE_LEAF */
 	SplitType split_type;      /* Direction/mode children split in container */
-	float ratio;               /* Weight relative to siblings (default 1.0f) */
-	float ratio_h;             /* Horizontal ratio (default 1.0f) */
-	float ratio_v;             /* Vertical ratio (default 1.0f) */
+	float ratio_h;             /* Horizontal ratio / weight (default 1.0f) */
+	float ratio_v;             /* Vertical ratio / weight (default 1.0f) */
 	struct wlr_box geom;       /* Computed absolute geometry on screen */
 
 	Node *parent;              /* Parent container/root (NULL if root) */
@@ -44,7 +43,7 @@ struct Node {
 	struct Workspace *ws;      /* Back-reference to parent workspace */
 };
 
-/* N-ary Tree operations */
+/* N-ary Tree Lifecycle & Management */
 Node *node_create(NodeType type, struct Workspace *ws);
 void node_insert_child(Node *parent, Node *child);
 Node *node_insert_client(struct Workspace *ws, struct Client *c);
@@ -55,12 +54,12 @@ int node_collect_leaves(Node *node, struct Client **array, int max);
 void node_arrange_recursive(Node *node, struct wlr_box box);
 void node_free_tree(Node *node);
 
-/* Spatial operations & resize helpers */
+/* Tree Manipulation & Sizing Helpers */
 void tree_resize_node(Node *node, float delta);
 void tree_swap_nodes(Node *a, Node *b);
 void tree_equalize_node(Node *node);
 
-/* Keybinding callbacks */
+/* User-facing Action & Keybinding Callbacks */
 void tree_swap_dir(const union Arg *arg);
 void tree_resize_active(const union Arg *arg);
 void tree_resize_dir(const union Arg *arg);

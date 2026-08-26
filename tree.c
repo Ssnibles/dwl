@@ -19,12 +19,9 @@ node_create(NodeType type, Workspace *ws)
 	Node *node = ecalloc(1, sizeof(Node));
 	node->type = type;
 	node->split_type = SPLIT_HORIZONTAL;
-	node->ratio = 1.0f;
 	node->ratio_h = 1.0f;
 	node->ratio_v = 1.0f;
 	node->ws = ws;
-	node->client = NULL;
-	node->parent = NULL;
 	wl_list_init(&node->children);
 	wl_list_init(&node->link);
 	return node;
@@ -37,6 +34,7 @@ node_insert_child(Node *parent, Node *child)
 		return;
 	child->parent = parent;
 	child->ws = parent->ws;
+	wl_list_remove(&child->link);
 	wl_list_insert(parent->children.prev, &child->link);
 }
 
@@ -75,13 +73,10 @@ node_insert_client(Workspace *ws, Client *c)
 		return leaf;
 	}
 
-	/* Case 2: Identify focus reference node */
+	/* Case 2: Identify focus reference node (O(1) tail access) */
 	focus_ref = (ws->focused_node && ws->focused_node != ws->root) ? ws->focused_node : NULL;
 	if (!focus_ref) {
-		Node *tmp;
-		wl_list_for_each(tmp, &ws->root->children, link) {
-			focus_ref = tmp;
-		}
+		focus_ref = wl_container_of(ws->root->children.prev, focus_ref, link);
 	}
 	if (!focus_ref)
 		focus_ref = ws->root;
@@ -97,11 +92,7 @@ node_insert_client(Workspace *ws, Client *c)
 		desired_split = SPLIT_HORIZONTAL;
 	}
 
-	if (target_parent->split_type == desired_split) {
-		leaf->parent = target_parent;
-		leaf->ws = ws;
-		wl_list_insert(&focus_ref->link, &leaf->link);
-	} else if (focus_ref->type == NODE_LEAF) {
+	if (target_parent->split_type != desired_split && focus_ref->type == NODE_LEAF) {
 		Node *container = node_create(NODE_CONTAINER, ws);
 		container->split_type = desired_split;
 		container->parent = target_parent;
@@ -167,8 +158,9 @@ node_remove(Node *node)
 	if (parent && parent->type == NODE_CONTAINER && wl_list_empty(&parent->children)) {
 		node_remove(parent);
 	}
-	/* If parent container has only 1 child and is not root, collapse parent */
-	else if (parent && parent->type == NODE_CONTAINER && parent->type != NODE_ROOT && wl_list_length(&parent->children) == 1) {
+	/* If parent container has only 1 child and is not root, collapse parent (O(1) check) */
+	else if (parent && parent->type == NODE_CONTAINER && parent->type != NODE_ROOT &&
+	         !wl_list_empty(&parent->children) && parent->children.next == parent->children.prev) {
 		Node *only_child = wl_container_of(parent->children.next, only_child, link);
 		Node *gparent = parent->parent;
 		if (gparent) {
@@ -341,11 +333,8 @@ tree_resize_node(Node *node, float delta)
 {
 	if (!node)
 		return;
-	node->ratio += delta;
 	node->ratio_h += delta;
 	node->ratio_v += delta;
-	if (node->ratio < 0.1f) node->ratio = 0.1f;
-	if (node->ratio > 10.0f) node->ratio = 10.0f;
 	if (node->ratio_h < 0.1f) node->ratio_h = 0.1f;
 	if (node->ratio_h > 10.0f) node->ratio_h = 10.0f;
 	if (node->ratio_v < 0.1f) node->ratio_v = 0.1f;
@@ -377,7 +366,6 @@ tree_equalize_node(Node *node)
 	if (!node)
 		return;
 
-	node->ratio = 1.0f;
 	node->ratio_h = 1.0f;
 	node->ratio_v = 1.0f;
 	wl_list_for_each(child, &node->children, link) {
@@ -517,7 +505,6 @@ tree_resize_dir(const Arg *arg)
 		if (target_node->ratio_v > 10.0f) target_node->ratio_v = 10.0f;
 	}
 
-	target_node->ratio = (target_node->ratio_h + target_node->ratio_v) / 2.0f;
 	arrange(selmon);
 }
 

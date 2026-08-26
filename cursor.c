@@ -152,8 +152,6 @@ buttonpress(struct wl_listener *listener, void *data)
 							if (grabc->node->ratio_v > 10.0f) grabc->node->ratio_v = 10.0f;
 						}
 
-						grabc->node->ratio = (grabc->node->ratio_h + grabc->node->ratio_v) / 2.0f;
-
 						if (selmon && (selmon->lt[selmon->sellt]->arrange == tile || selmon->lt[selmon->sellt]->arrange == master_stack)) {
 							if (fabsf(scale_w - 1.0f) > 0.01f && selmon->w.width > 0) {
 								float delta_mfact = (float)(new_w - old_w) / (float)selmon->w.width;
