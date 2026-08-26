@@ -969,6 +969,7 @@ printstatus(void)
 {
 	Monitor *m = NULL;
 	Client *c;
+	unsigned int occ, selected;
 
 	wl_list_for_each(m, &mons, link) {
 		if ((c = focustop(m))) {
@@ -986,7 +987,8 @@ printstatus(void)
 		printf("%s selmon %u\n", m->wlr_output->name, m == selmon);
 		printf("%s layout %s\n", m->wlr_output->name, m->ltsymbol);
 
-		unsigned int occ = 0, selected = 0;
+		occ = 0;
+		selected = 0;
 		if (m->active_workspace)
 			selected = 1u << (m->active_workspace->id - 1);
 		wl_list_for_each(c, &clients, link) {
@@ -1548,6 +1550,7 @@ unmapnotify(struct wl_listener *listener, void *data)
 	} else {
 		Monitor *m = c->mon;
 		Workspace *ws = c->ws;
+		Client *next_focus = NULL;
 		if (c->node)
 			node_remove(c->node);
 		wl_list_remove(&c->link);
@@ -1558,7 +1561,6 @@ unmapnotify(struct wl_listener *listener, void *data)
 		if (m)
 			arrange(m);
 
-		Client *next_focus = NULL;
 		if (ws) {
 			if (ws->focused_node && ws->focused_node->type == NODE_LEAF && ws->focused_node->client) {
 				next_focus = ws->focused_node->client;

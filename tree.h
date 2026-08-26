@@ -43,6 +43,14 @@ struct Node {
 	struct Workspace *ws;      /* Back-reference to parent workspace */
 };
 
+static inline float
+clamp_ratio(float r)
+{
+	if (r < 0.1f) return 0.1f;
+	if (r > 10.0f) return 10.0f;
+	return r;
+}
+
 /* N-ary Tree Lifecycle & Management */
 Node *node_create(NodeType type, struct Workspace *ws);
 void node_insert_child(Node *parent, Node *child);

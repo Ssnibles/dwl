@@ -13,14 +13,6 @@
 #include "tree.h"
 #include "workspace.h"
 
-static inline float
-clamp_ratio(float r)
-{
-	if (r < 0.1f) return 0.1f;
-	if (r > 10.0f) return 10.0f;
-	return r;
-}
-
 Node *
 node_create(NodeType type, Workspace *ws)
 {
@@ -547,8 +539,7 @@ tree_swap_dir(const Arg *arg)
 	cy = c->geom.y + c->geom.height / 2.0;
 
 	wl_list_for_each(tc, &clients, link) {
-		int in_dir = 0;
-		double primary = 0, secondary = 0, dist;
+		double dist;
 
 		if (tc == c || !VISIBLEON(tc, selmon) || tc->isfloating)
 			continue;
@@ -558,23 +549,7 @@ tree_swap_dir(const Arg *arg)
 		dx = tx - cx;
 		dy = ty - cy;
 
-		switch (dir) {
-		case WLR_DIRECTION_LEFT:
-			if (dx < -1.0) { in_dir = 1; primary = -dx; secondary = fabs(dy); }
-			break;
-		case WLR_DIRECTION_RIGHT:
-			if (dx > 1.0) { in_dir = 1; primary = dx; secondary = fabs(dy); }
-			break;
-		case WLR_DIRECTION_UP:
-			if (dy < -1.0) { in_dir = 1; primary = -dy; secondary = fabs(dx); }
-			break;
-		case WLR_DIRECTION_DOWN:
-			if (dy > 1.0) { in_dir = 1; primary = dy; secondary = fabs(dx); }
-			break;
-		}
-
-		if (in_dir) {
-			dist = primary * primary + 3.0 * secondary * secondary;
+		if (spatial_direction_match(dx, dy, dir, &dist)) {
 			if (dist < min_dist) {
 				min_dist = dist;
 				best = tc;

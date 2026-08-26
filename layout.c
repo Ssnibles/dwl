@@ -22,7 +22,7 @@ arrange(Monitor *m)
 
 	wl_list_for_each(c, &clients, link) {
 		if (c->mon == m) {
-			int visible = (c->ws == m->active_workspace);
+			int visible = m->isoverview || (c->ws == m->active_workspace);
 			wlr_scene_node_set_enabled(&c->scene->node, visible);
 			client_set_suspended(c, !visible);
 		}
@@ -68,18 +68,37 @@ bsp_layout(Monitor *m)
 	tree_layout(m);
 }
 
+static float
+calculate_ratio_factor(Client **leaves, int count, int is_horiz)
+{
+	float r1, r2 = 0.0f;
+	int i;
+
+	r1 = (leaves[0]->node && (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) > 0.05f)
+		? (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) : 1.0f;
+	for (i = 1; i < count; i++) {
+		float r = (leaves[i]->node && (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) > 0.05f)
+			? (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) : 1.0f;
+		r2 += r;
+	}
+	r2 /= (float)(count - 1);
+
+	return r1 / (r1 + r2);
+}
+
 static void
 dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 {
 	int g = (int)gappx;
-	struct wlr_box b1, b2;
-	int i;
+	int is_horiz;
+	float ratio_factor;
+	struct wlr_box b1, b2, gbox;
 
 	if (count <= 0)
 		return;
 
 	if (count == 1) {
-		struct wlr_box gbox = {
+		gbox = (struct wlr_box){
 			.x = box.x + g,
 			.y = box.y + g,
 			.width = MAX(1, box.width - 2 * g),
@@ -92,18 +111,8 @@ dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 	b1 = box;
 	b2 = box;
 
-	int is_horiz = (depth % 2 == 0);
-	float r1 = (leaves[0]->node && (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) > 0.05f)
-		? (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) : 1.0f;
-	float r2 = 0.0f;
-	for (i = 1; i < count; i++) {
-		float r = (leaves[i]->node && (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) > 0.05f)
-			? (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) : 1.0f;
-		r2 += r;
-	}
-	r2 /= (float)(count - 1);
-
-	float ratio_factor = r1 / (r1 + r2);
+	is_horiz = (depth % 2 == 0);
+	ratio_factor = calculate_ratio_factor(leaves, count, is_horiz);
 
 	if (is_horiz) {
 		int w = (int)roundf((float)box.width * ratio_factor);
@@ -119,15 +128,13 @@ dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 		b2.height = box.height - h;
 	}
 
-	{
-		struct wlr_box gbox = {
-			.x = b1.x + g,
-			.y = b1.y + g,
-			.width = MAX(1, b1.width - 2 * g),
-			.height = MAX(1, b1.height - 2 * g)
-		};
-		resize(leaves[0], gbox, 0);
-	}
+	gbox = (struct wlr_box){
+		.x = b1.x + g,
+		.y = b1.y + g,
+		.width = MAX(1, b1.width - 2 * g),
+		.height = MAX(1, b1.height - 2 * g)
+	};
+	resize(leaves[0], gbox, 0);
 
 	dwindle_recursive(leaves + 1, count - 1, b2, depth + 1);
 }
@@ -152,14 +159,15 @@ static void
 spiral_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 {
 	int g = (int)gappx;
-	struct wlr_box b1, b2;
-	int i;
+	int is_horiz;
+	float ratio_factor;
+	struct wlr_box b1, b2, gbox;
 
 	if (count <= 0)
 		return;
 
 	if (count == 1) {
-		struct wlr_box gbox = {
+		gbox = (struct wlr_box){
 			.x = box.x + g,
 			.y = box.y + g,
 			.width = MAX(1, box.width - 2 * g),
@@ -172,18 +180,8 @@ spiral_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 	b1 = box;
 	b2 = box;
 
-	int is_horiz = (depth % 2 == 0);
-	float r1 = (leaves[0]->node && (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) > 0.05f)
-		? (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) : 1.0f;
-	float r2 = 0.0f;
-	for (i = 1; i < count; i++) {
-		float r = (leaves[i]->node && (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) > 0.05f)
-			? (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) : 1.0f;
-		r2 += r;
-	}
-	r2 /= (float)(count - 1);
-
-	float ratio_factor = r1 / (r1 + r2);
+	is_horiz = (depth % 2 == 0);
+	ratio_factor = calculate_ratio_factor(leaves, count, is_horiz);
 
 	switch (depth % 4) {
 	case 0:
@@ -224,15 +222,13 @@ spiral_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 		break;
 	}
 
-	{
-		struct wlr_box gbox = {
-			.x = b1.x + g,
-			.y = b1.y + g,
-			.width = MAX(1, b1.width - 2 * g),
-			.height = MAX(1, b1.height - 2 * g)
-		};
-		resize(leaves[0], gbox, 0);
-	}
+	gbox = (struct wlr_box){
+		.x = b1.x + g,
+		.y = b1.y + g,
+		.width = MAX(1, b1.width - 2 * g),
+		.height = MAX(1, b1.height - 2 * g)
+	};
+	resize(leaves[0], gbox, 0);
 
 	spiral_recursive(leaves + 1, count - 1, b2, depth + 1);
 }
@@ -364,8 +360,9 @@ tile(Monitor *m)
 
 	my = ty = 0;
 	for (i = 0; i < n; i++) {
+		float r;
 		c = leaves[i];
-		float r = (c->node && c->node->ratio_v > 0.05f) ? c->node->ratio_v : 1.0f;
+		r = (c->node && c->node->ratio_v > 0.05f) ? c->node->ratio_v : 1.0f;
 		if (i < m->nmaster) {
 			int h;
 			if (i == nm - 1)
@@ -376,7 +373,6 @@ tile(Monitor *m)
 			resize(c, (struct wlr_box){.x = mx, .y = m->w.y + my + g, .width = mw_final, .height = h}, 0);
 			my += h + g;
 		} else {
-			int k = i - m->nmaster;
 			int h;
 			if (i == n - 1)
 				h = m->w.height - ty - g * 2;
@@ -650,6 +646,8 @@ toggleoverview(const Arg *arg)
 		}
 
 		if (sel) {
+			if (sel->ws && sel->mon && sel->mon->active_workspace != sel->ws)
+				selmon->active_workspace = sel->ws;
 			wlr_cursor_warp_closest(cursor, NULL,
 					sel->geom.x + sel->geom.width / 2,
 					sel->geom.y + sel->geom.height / 2);
@@ -679,8 +677,6 @@ focusdir(const Arg *arg)
 	cy = c->geom.y + c->geom.height / 2.0;
 
 	wl_list_for_each(tc, &clients, link) {
-		int in_dir = 0;
-		double primary = 0, secondary = 0;
 		double wrap_primary = 0, wrap_secondary = 0;
 		double dist, wdist;
 
@@ -692,23 +688,7 @@ focusdir(const Arg *arg)
 		dx = tx - cx;
 		dy = ty - cy;
 
-		switch (dir) {
-		case WLR_DIRECTION_LEFT:
-			if (dx < -1.0) { in_dir = 1; primary = -dx; secondary = fabs(dy); }
-			break;
-		case WLR_DIRECTION_RIGHT:
-			if (dx > 1.0) { in_dir = 1; primary = dx; secondary = fabs(dy); }
-			break;
-		case WLR_DIRECTION_UP:
-			if (dy < -1.0) { in_dir = 1; primary = -dy; secondary = fabs(dx); }
-			break;
-		case WLR_DIRECTION_DOWN:
-			if (dy > 1.0) { in_dir = 1; primary = dy; secondary = fabs(dx); }
-			break;
-		}
-
-		if (in_dir) {
-			dist = primary * primary + 3.0 * secondary * secondary;
+		if (spatial_direction_match(dx, dy, dir, &dist)) {
 			if (dist < min_dist) {
 				min_dist = dist;
 				best = tc;

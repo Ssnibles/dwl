@@ -75,30 +75,12 @@ void
 workspace_switch(Workspace *ws)
 {
 	Monitor *m;
-	Client *c;
 
 	if (!ws || !ws->mon || ws->mon->active_workspace == ws)
 		return;
 
 	m = ws->mon;
-
-	/* Hide clients in current active workspace */
-	wl_list_for_each(c, &clients, link) {
-		if (c->mon == m && c->ws == m->active_workspace) {
-			wlr_scene_node_set_enabled(&c->scene->node, false);
-			client_set_suspended(c, 1);
-		}
-	}
-
 	m->active_workspace = ws;
-
-	/* Reveal clients in target workspace */
-	wl_list_for_each(c, &clients, link) {
-		if (c->mon == m && c->ws == ws) {
-			wlr_scene_node_set_enabled(&c->scene->node, true);
-			client_set_suspended(c, 0);
-		}
-	}
 
 	arrange(m);
 

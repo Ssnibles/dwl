@@ -20,6 +20,7 @@
 #include "layout.h"
 #include "client.h"
 #include "config.h"
+#include "tree.h"
 
 static int grabc_was_tiled;
 static struct wlr_box grabc_start_geom;
@@ -140,17 +141,11 @@ buttonpress(struct wl_listener *listener, void *data)
 						float scale_w = (old_w > 0) ? (float)new_w / (float)old_w : 1.0f;
 						float scale_h = (old_h > 0) ? (float)new_h / (float)old_h : 1.0f;
 
-						if (fabsf(scale_w - 1.0f) > 0.01f && scale_w > 0.05f && scale_w < 20.0f) {
-							grabc->node->ratio_h *= scale_w;
-							if (grabc->node->ratio_h < 0.1f) grabc->node->ratio_h = 0.1f;
-							if (grabc->node->ratio_h > 10.0f) grabc->node->ratio_h = 10.0f;
-						}
+						if (fabsf(scale_w - 1.0f) > 0.01f && scale_w > 0.05f && scale_w < 20.0f)
+							grabc->node->ratio_h = clamp_ratio(grabc->node->ratio_h * scale_w);
 
-						if (fabsf(scale_h - 1.0f) > 0.01f && scale_h > 0.05f && scale_h < 20.0f) {
-							grabc->node->ratio_v *= scale_h;
-							if (grabc->node->ratio_v < 0.1f) grabc->node->ratio_v = 0.1f;
-							if (grabc->node->ratio_v > 10.0f) grabc->node->ratio_v = 10.0f;
-						}
+						if (fabsf(scale_h - 1.0f) > 0.01f && scale_h > 0.05f && scale_h < 20.0f)
+							grabc->node->ratio_v = clamp_ratio(grabc->node->ratio_v * scale_h);
 
 						if (selmon && (selmon->lt[selmon->sellt]->arrange == tile || selmon->lt[selmon->sellt]->arrange == master_stack)) {
 							if (fabsf(scale_w - 1.0f) > 0.01f && selmon->w.width > 0) {
