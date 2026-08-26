@@ -406,6 +406,7 @@ static KeyboardGroup *kb_group;
 static unsigned int cursor_mode;
 static Client *grabc;
 static int grabcx, grabcy; /* client-relative */
+static int grabc_was_tiled;
 
 static struct wlr_output_layout *output_layout;
 static struct wlr_box sgeom;
@@ -662,8 +663,45 @@ buttonpress(struct wl_listener *listener, void *data)
 			wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
 			cursor_mode = CurNormal;
 			/* Drop the window off on its new monitor */
-			selmon = xytomon(cursor->x, cursor->y);
-			setmon(grabc, selmon, 0);
+			if (grabc) {
+				selmon = xytomon(cursor->x, cursor->y);
+				setmon(grabc, selmon, 0);
+				if (grabc_was_tiled) {
+					Client *tc, *at = NULL;
+					double min_dist = 1e9;
+					wl_list_for_each(tc, &clients, link) {
+						double dx = 0, dy = 0, dist;
+						if (!VISIBLEON(tc, selmon) || tc->isfloating || tc->isfullscreen || tc == grabc)
+							continue;
+						if (cursor->x < tc->geom.x)
+							dx = tc->geom.x - cursor->x;
+						else if (cursor->x > tc->geom.x + tc->geom.width)
+							dx = cursor->x - (tc->geom.x + tc->geom.width);
+
+						if (cursor->y < tc->geom.y)
+							dy = tc->geom.y - cursor->y;
+						else if (cursor->y > tc->geom.y + tc->geom.height)
+							dy = cursor->y - (tc->geom.y + tc->geom.height);
+
+						dist = dx * dx + dy * dy;
+						if (dist < min_dist) {
+							min_dist = dist;
+							at = tc;
+						}
+					}
+					if (at && at->geom.width > 0 && at->geom.height > 0) {
+						double norm_x = (cursor->x - at->geom.x) / (double)at->geom.width - 0.5;
+						double norm_y = (cursor->y - at->geom.y) / (double)at->geom.height - 0.5;
+						int before = (fabs(norm_x) > fabs(norm_y)) ? (norm_x < 0) : (norm_y < 0);
+						wl_list_remove(&grabc->link);
+						if (before)
+							wl_list_insert(at->link.prev, &grabc->link);
+						else
+							wl_list_insert(&at->link, &grabc->link);
+					}
+					setfloating(grabc, 0);
+				}
+			}
 			grabc = NULL;
 			return;
 		}
@@ -689,7 +727,16 @@ checkidleinhibitor(struct wlr_surface *exclude)
 	struct wlr_idle_inhibitor_v1 *inhibitor;
 	wl_list_for_each(inhibitor, &idle_inhibit_mgr->inhibitors, link) {
 		struct wlr_surface *surface = wlr_surface_get_root_surface(inhibitor->surface);
-		struct wlr_scene_tree *tree = surface->data;
+		Client *c = NULL;
+		LayerSurface *l = NULL;
+		struct wlr_scene_tree *tree = NULL;
+
+		toplevel_from_wlr_surface(surface, &c, &l);
+		if (c)
+			tree = c->scene;
+		else if (l)
+			tree = l->scene;
+
 		if (exclude != surface && (bypass_surface_visibility || (!tree
 				|| wlr_scene_node_coords(&tree->node, &unused_lx, &unused_ly)))) {
 			inhibited = 1;
@@ -1986,6 +2033,7 @@ moveresize(const Arg *arg)
 		return;
 
 	/* Float the window and tell motionnotify to grab it */
+	grabc_was_tiled = !grabc->isfloating;
 	setfloating(grabc, 1);
 	switch (cursor_mode = arg->ui) {
 	case CurMove:
@@ -2178,7 +2226,6 @@ rendermon(struct wl_listener *listener, void *data)
 	 * generally at the output's refresh rate (e.g. 60Hz). */
 	Monitor *m = wl_container_of(listener, m, frame);
 	Client *c;
-	struct wlr_output_state pending = {0};
 	struct timespec now;
 
 	/* Render if no XDG clients have an outstanding resize and are visible on
@@ -2188,13 +2235,18 @@ rendermon(struct wl_listener *listener, void *data)
 			goto skip;
 	}
 
-	wlr_scene_output_commit(m->scene_output, NULL);
+	/* Ensure damage ring includes whole output damage when a frame is needed,
+	 * preventing multi-monitor coordinate damage clipping and flickering on external displays. */
+	if (wlr_scene_output_needs_frame(m->scene_output))
+		wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
+
+	if (!wlr_scene_output_commit(m->scene_output, NULL))
+		return;
 
 skip:
 	/* Let clients know a frame has been rendered */
 	clock_gettime(CLOCK_MONOTONIC, &now);
 	wlr_scene_output_send_frame_done(m->scene_output, &now);
-	wlr_output_state_finish(&pending);
 }
 
 void
