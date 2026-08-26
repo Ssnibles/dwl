@@ -191,6 +191,25 @@ setsel(struct wl_listener *listener, void *data)
 	wlr_seat_set_selection(seat, event->source, event->serial);
 }
 
+#ifdef XWAYLAND
+static void
+xwaylandready(struct wl_listener *listener, void *data)
+{
+	struct wlr_xcursor *xcursor;
+
+	wlr_xwayland_set_seat(xwayland, seat);
+
+	if ((xcursor = wlr_xcursor_manager_get_xcursor(cursor_mgr, "default", 1)))
+		wlr_xwayland_set_cursor(xwayland,
+				xcursor->images[0]->buffer, xcursor->images[0]->width * 4,
+				xcursor->images[0]->width, xcursor->images[0]->height,
+				xcursor->images[0]->hotspot_x, xcursor->images[0]->hotspot_y);
+}
+
+static struct wl_listener new_xwayland_surface = {.notify = createnotifyx11};
+static struct wl_listener xwayland_ready = {.notify = xwaylandready};
+#endif
+
 /* Unlinks global event listeners upon server shutdown */
 static void
 cleanuplisteners(void)
@@ -223,6 +242,10 @@ cleanuplisteners(void)
 	wl_list_remove(&request_start_drag.link);
 	wl_list_remove(&start_drag.link);
 	wl_list_remove(&new_session_lock.link);
+#ifdef XWAYLAND
+	wl_list_remove(&new_xwayland_surface.link);
+	wl_list_remove(&xwayland_ready.link);
+#endif
 }
 
 /* Destroys compositor resources upon shutdown */
@@ -250,100 +273,156 @@ cleanup(void)
 static void
 setup(void)
 {
-	struct sigaction sa;
-
-	/* Clean up child processes */
+	int drm_fd, i, sig[] = {SIGCHLD, SIGINT, SIGTERM, SIGPIPE};
+	struct sigaction sa = {.sa_flags = SA_RESTART, .sa_handler = handlesig};
 	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = SA_RESTART;
-	sa.sa_handler = handlesig;
-	sigaction(SIGCHLD, &sa, NULL);
 
-	wl_list_init(&clients);
-	wl_list_init(&fstack);
-	wl_list_init(&mons);
+	for (i = 0; i < (int)LENGTH(sig); i++)
+		sigaction(sig[i], &sa, NULL);
+
+	wlr_log_init(log_level, NULL);
 
 	dpy = wl_display_create();
 	event_loop = wl_display_get_event_loop(dpy);
 
-	backend = wlr_backend_autocreate(event_loop, &session);
-	if (!backend)
-		die("could not create backend");
+	if (!(backend = wlr_backend_autocreate(event_loop, &session)))
+		die("couldn't create backend");
 
-	drw = wlr_renderer_autocreate(backend);
-	if (!drw)
-		die("could not create renderer");
-
-	wlr_renderer_init_wl_display(drw, dpy);
-
-	alloc = wlr_allocator_autocreate(backend, drw);
-	if (!alloc)
-		die("could not create allocator");
-
-	compositor = wlr_compositor_create(dpy, 5, drw);
-	wlr_subcompositor_create(dpy);
-	wlr_data_device_manager_create(dpy);
-
-	/* Initialize scene graph and scene layers */
 	scene = wlr_scene_create();
 	root_bg = wlr_scene_rect_create(&scene->tree, 0, 0, rootcolor);
-
-	for (size_t i = 0; i < NUM_LAYERS; i++)
+	for (i = 0; i < NUM_LAYERS; i++)
 		layers[i] = wlr_scene_tree_create(&scene->tree);
+	drag_icon = wlr_scene_tree_create(&scene->tree);
+	wlr_scene_node_place_below(&drag_icon->node, &layers[LyrBlock]->node);
+
+	if (!(drw = fx_renderer_create(backend)))
+		if (!(drw = wlr_renderer_autocreate(backend)))
+			die("couldn't create renderer");
+	LISTEN(&drw->events.lost, &gpu_reset, gpureset);
+
+	wlr_renderer_init_wl_shm(drw, dpy);
+
+	if (wlr_renderer_get_texture_formats(drw, WLR_BUFFER_CAP_DMABUF)) {
+		wlr_drm_create(dpy, drw);
+		wlr_scene_set_linux_dmabuf_v1(scene,
+				wlr_linux_dmabuf_v1_create_with_renderer(dpy, 5, drw));
+	}
+
+	if ((drm_fd = wlr_renderer_get_drm_fd(drw)) >= 0 && drw->features.timeline
+			&& backend->features.timeline)
+		wlr_linux_drm_syncobj_manager_v1_create(dpy, 1, drm_fd);
+
+	if (!(alloc = wlr_allocator_autocreate(backend, drw)))
+		die("couldn't create allocator");
+
+	compositor = wlr_compositor_create(dpy, 6, drw);
+	wlr_subcompositor_create(dpy);
+	wlr_data_device_manager_create(dpy);
+	wlr_export_dmabuf_manager_v1_create(dpy);
+	wlr_screencopy_manager_v1_create(dpy);
+	wlr_data_control_manager_v1_create(dpy);
+	wlr_ext_data_control_manager_v1_create(dpy, 1);
+	wlr_primary_selection_v1_device_manager_create(dpy);
+	wlr_viewporter_create(dpy);
+	wlr_single_pixel_buffer_manager_v1_create(dpy);
+	wlr_fractional_scale_manager_v1_create(dpy, 1);
+	wlr_presentation_create(dpy, backend, 2);
+	wlr_alpha_modifier_v1_create(dpy);
+
+	activation = wlr_xdg_activation_v1_create(dpy);
+	LISTEN(&activation->events.request_activate, &request_activate, urgent);
+
+	wlr_scene_set_gamma_control_manager_v1(scene, wlr_gamma_control_manager_v1_create(dpy));
+
+	power_mgr = wlr_output_power_manager_v1_create(dpy);
+	LISTEN(&power_mgr->events.set_mode, &output_power_mgr_set_mode, powermgrsetmode);
 
 	output_layout = wlr_output_layout_create(dpy);
+	LISTEN(&output_layout->events.change, &layout_change, updatemons);
 
-	/* Wayland protocols */
+	wlr_xdg_output_manager_v1_create(dpy, output_layout);
+
+	wl_list_init(&mons);
+	LISTEN(&backend->events.new_output, &new_output, createmon);
+
+	wl_list_init(&clients);
+	wl_list_init(&fstack);
+
 	xdg_shell = wlr_xdg_shell_create(dpy, 6);
 	LISTEN(&xdg_shell->events.new_toplevel, &new_xdg_toplevel, createnotify);
 	LISTEN(&xdg_shell->events.new_popup, &new_xdg_popup, createpopup);
 
-	layer_shell = wlr_layer_shell_v1_create(dpy, 4);
+	layer_shell = wlr_layer_shell_v1_create(dpy, 3);
 	LISTEN(&layer_shell->events.new_surface, &new_layer_surface, createlayersurface);
 
-	/* Input initialization */
+	idle_notifier = wlr_idle_notifier_v1_create(dpy);
+
+	idle_inhibit_mgr = wlr_idle_inhibit_v1_create(dpy);
+	LISTEN(&idle_inhibit_mgr->events.new_inhibitor, &new_idle_inhibitor, createidleinhibitor);
+
+	session_lock_mgr = wlr_session_lock_manager_v1_create(dpy);
+	LISTEN(&session_lock_mgr->events.new_lock, &new_session_lock, locksession);
+	locked_bg = wlr_scene_rect_create(layers[LyrBlock], sgeom.width, sgeom.height,
+			(float [4]){0.1f, 0.1f, 0.1f, 1.0f});
+	wlr_scene_node_set_enabled(&locked_bg->node, 0);
+
+	wlr_server_decoration_manager_set_default_mode(
+			wlr_server_decoration_manager_create(dpy),
+			WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
+	xdg_decoration_mgr = wlr_xdg_decoration_manager_v1_create(dpy);
+	LISTEN(&xdg_decoration_mgr->events.new_toplevel_decoration, &new_xdg_decoration, createdecoration);
+
+	pointer_constraints = wlr_pointer_constraints_v1_create(dpy);
+	LISTEN(&pointer_constraints->events.new_constraint, &new_pointer_constraint, createpointerconstraint);
+
+	relative_pointer_mgr = wlr_relative_pointer_manager_v1_create(dpy);
+
 	cursor = wlr_cursor_create();
 	wlr_cursor_attach_output_layout(cursor, output_layout);
 
 	cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
-	wlr_xcursor_manager_load(cursor_mgr, 1);
+	setenv("XCURSOR_SIZE", "24", 1);
 
-	seat = wlr_seat_create(dpy, "seat0");
-	kb_group = createkeyboardgroup();
-
-	LISTEN(&backend->events.new_input, &new_input_device, inputdevice);
-	LISTEN(&backend->events.new_output, &new_output, createmon);
-	LISTEN(&cursor->events.axis, &cursor_axis, axisnotify);
-	LISTEN(&cursor->events.button, &cursor_button, buttonpress);
-	LISTEN(&cursor->events.frame, &cursor_frame, cursorframe);
 	LISTEN(&cursor->events.motion, &cursor_motion, motionrelative);
 	LISTEN(&cursor->events.motion_absolute, &cursor_motion_absolute, motionabsolute);
+	LISTEN(&cursor->events.button, &cursor_button, buttonpress);
+	LISTEN(&cursor->events.axis, &cursor_axis, axisnotify);
+	LISTEN(&cursor->events.frame, &cursor_frame, cursorframe);
 
-	/* Additional protocols */
-	activation = wlr_xdg_activation_v1_create(dpy);
-	LISTEN(&activation->events.request_activate, &request_activate, urgent);
+	cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(dpy, 1);
+	LISTEN(&cursor_shape_mgr->events.request_set_shape, &request_set_cursor_shape, setcursorshape);
 
-	idle_notifier = wlr_idle_notifier_v1_create(dpy);
-	idle_inhibit_mgr = wlr_idle_inhibit_v1_create(dpy);
-	LISTEN(&idle_inhibit_mgr->events.new_inhibitor, &new_idle_inhibitor, createidleinhibitor);
+	LISTEN(&backend->events.new_input, &new_input_device, inputdevice);
+	virtual_keyboard_mgr = wlr_virtual_keyboard_manager_v1_create(dpy);
+	LISTEN(&virtual_keyboard_mgr->events.new_virtual_keyboard, &new_virtual_keyboard, virtualkeyboard);
+	virtual_pointer_mgr = wlr_virtual_pointer_manager_v1_create(dpy);
+	LISTEN(&virtual_pointer_mgr->events.new_virtual_pointer, &new_virtual_pointer, virtualpointer);
+
+	seat = wlr_seat_create(dpy, "seat0");
+	LISTEN(&seat->events.request_set_cursor, &request_cursor, setcursor);
+	LISTEN(&seat->events.request_set_selection, &request_set_sel, setsel);
+	LISTEN(&seat->events.request_set_primary_selection, &request_set_psel, setpsel);
+	LISTEN(&seat->events.request_start_drag, &request_start_drag, requeststartdrag);
+	LISTEN(&seat->events.start_drag, &start_drag, startdrag);
+
+	kb_group = createkeyboardgroup();
+	wl_list_init(&kb_group->destroy.link);
 
 	output_mgr = wlr_output_manager_v1_create(dpy);
 	LISTEN(&output_mgr->events.apply, &output_mgr_apply, outputmgrapply);
 	LISTEN(&output_mgr->events.test, &output_mgr_test, outputmgrtest);
 
-	power_mgr = wlr_output_power_manager_v1_create(dpy);
-	LISTEN(&power_mgr->events.set_mode, &output_power_mgr_set_mode, powermgrsetmode);
+	unsetenv("DISPLAY");
+#ifdef XWAYLAND
+	if ((xwayland = wlr_xwayland_create(dpy, compositor, 1))) {
+		LISTEN(&xwayland->events.ready, &xwayland_ready, xwaylandready);
+		LISTEN(&xwayland->events.new_surface, &new_xwayland_surface, createnotifyx11);
 
-	session_lock_mgr = wlr_session_lock_manager_v1_create(dpy);
-	LISTEN(&session_lock_mgr->events.new_lock, &new_session_lock, locksession);
-
-	virtual_keyboard_mgr = wlr_virtual_keyboard_manager_v1_create(dpy);
-	LISTEN(&virtual_keyboard_mgr->events.new_virtual_keyboard, &new_virtual_keyboard, virtualkeyboard);
-
-	virtual_pointer_mgr = wlr_virtual_pointer_manager_v1_create(dpy);
-	LISTEN(&virtual_pointer_mgr->events.new_virtual_pointer, &new_virtual_pointer, virtualpointer);
-
-	cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(dpy, 1);
-	LISTEN(&cursor_shape_mgr->events.request_set_shape, &request_set_cursor_shape, setcursorshape);
+		setenv("DISPLAY", xwayland->display_name, 1);
+	} else {
+		fprintf(stderr, "failed to setup XWayland X server, continuing without it\n");
+	}
+#endif
 }
 
 /* Starts backend and runs compositor main loop */
@@ -377,22 +456,33 @@ main(int argc, char *argv[])
 	char *startup_cmd = NULL;
 	int c;
 
-	while ((c = getopt(argc, argv, "s:v")) != -1) {
+	while ((c = getopt(argc, argv, "s:hdv")) != -1) {
 		switch (c) {
 		case 's':
 			startup_cmd = optarg;
+			break;
+		case 'd':
+			log_level = WLR_DEBUG;
 			break;
 		case 'v':
 			puts("dwl " VERSION);
 			return 0;
 		default:
-			return 1;
+			goto usage;
 		}
 	}
+	if (optind < argc)
+		goto usage;
+
+	if (!getenv("XDG_RUNTIME_DIR"))
+		die("XDG_RUNTIME_DIR must be set");
 
 	setup();
 	run(startup_cmd);
 	cleanup();
 
 	return 0;
+
+usage:
+	die("usage: dwl [-s startup command] [-d] [-v]");
 }
