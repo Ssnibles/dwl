@@ -1547,6 +1547,7 @@ unmapnotify(struct wl_listener *listener, void *data)
 		}
 	} else {
 		Monitor *m = c->mon;
+		Workspace *ws = c->ws;
 		if (c->node)
 			node_remove(c->node);
 		wl_list_remove(&c->link);
@@ -1556,6 +1557,25 @@ unmapnotify(struct wl_listener *listener, void *data)
 		c->node = NULL;
 		if (m)
 			arrange(m);
+
+		Client *next_focus = NULL;
+		if (ws) {
+			if (ws->focused_node && ws->focused_node->type == NODE_LEAF && ws->focused_node->client) {
+				next_focus = ws->focused_node->client;
+			} else if (ws->focused_node) {
+				Client *leaves[1];
+				if (node_collect_leaves(ws->focused_node, leaves, 1) > 0)
+					next_focus = leaves[0];
+			}
+			if (!next_focus && ws->root) {
+				Client *leaves[1];
+				if (node_collect_leaves(ws->root, leaves, 1) > 0)
+					next_focus = leaves[0];
+			}
+		}
+		if (!next_focus)
+			next_focus = focustop(m ? m : selmon);
+		focusclient(next_focus, 1);
 	}
 
 	destroylabeloverlay(c);
