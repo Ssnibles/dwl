@@ -14,7 +14,6 @@ applyrules(Client *c)
 {
 	/* rule matching */
 	const char *appid, *title;
-	uint32_t newtags = 0;
 	int i;
 	const Rule *r;
 	Monitor *mon = selmon, *m;
@@ -28,7 +27,6 @@ applyrules(Client *c)
 		if ((!r->title || strstr(title, r->title))
 				&& (!r->id || strstr(appid, r->id))) {
 			isfloating = r->isfloating;
-			newtags |= r->tags;
 			i = 0;
 			wl_list_for_each(m, &mons, link) {
 				if (r->monitor == i++)
@@ -38,6 +36,6 @@ applyrules(Client *c)
 	}
 
 	isfloating |= client_is_float_type(c);
-	setmon(c, mon, newtags);
+	setmon(c, mon);
 	setfloating(c, isfloating);
 }

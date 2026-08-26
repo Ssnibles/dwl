@@ -1,0 +1,70 @@
+/*
+ * See LICENSE file for copyright and license details.
+ */
+#ifndef TREE_H
+#define TREE_H
+
+#include <wlr/util/box.h>
+#include <wayland-server-core.h>
+
+/* Forward declarations */
+struct Client;
+struct Monitor;
+struct Workspace;
+union Arg;
+
+typedef enum {
+	NODE_ROOT,
+	NODE_CONTAINER,
+	NODE_LEAF
+} NodeType;
+
+typedef enum {
+	SPLIT_NONE,
+	SPLIT_HORIZONTAL,
+	SPLIT_VERTICAL,
+	SPLIT_TABBED,
+	SPLIT_STACKED
+} SplitType;
+
+typedef struct Node Node;
+struct Node {
+	NodeType type;             /* NODE_ROOT, NODE_CONTAINER, or NODE_LEAF */
+	SplitType split_type;      /* Direction/mode children split in container */
+	float ratio;               /* Weight relative to siblings (default 1.0f) */
+	float ratio_h;             /* Horizontal ratio (default 1.0f) */
+	float ratio_v;             /* Vertical ratio (default 1.0f) */
+	struct wlr_box geom;       /* Computed absolute geometry on screen */
+
+	Node *parent;              /* Parent container/root (NULL if root) */
+	struct wl_list children;   /* List of child Node structures (via child->link) */
+	struct wl_list link;       /* Entry in parent's children list */
+
+	struct Client *client;     /* Non-NULL only for NODE_LEAF nodes */
+	struct Workspace *ws;      /* Back-reference to parent workspace */
+};
+
+/* N-ary Tree operations */
+Node *node_create(NodeType type, struct Workspace *ws);
+void node_insert_child(Node *parent, Node *child);
+Node *node_insert_client(struct Workspace *ws, struct Client *c);
+void node_remove(Node *node);
+Node *node_find_client(Node *root, struct Client *c);
+int node_count_leaves(Node *node);
+int node_collect_leaves(Node *node, struct Client **array, int max);
+void node_arrange_recursive(Node *node, struct wlr_box box);
+void node_free_tree(Node *node);
+
+/* Spatial operations & resize helpers */
+void tree_resize_node(Node *node, float delta);
+void tree_swap_nodes(Node *a, Node *b);
+void tree_equalize_node(Node *node);
+
+/* Keybinding callbacks */
+void tree_swap_dir(const union Arg *arg);
+void tree_resize_active(const union Arg *arg);
+void tree_resize_dir(const union Arg *arg);
+void tree_equalize_active(const union Arg *arg);
+void tree_set_split_type(const union Arg *arg);
+
+#endif /* TREE_H */

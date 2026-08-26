@@ -38,13 +38,17 @@ createmon(struct wl_listener *listener, void *data)
 
 	m = wlr_output->data = ecalloc(1, sizeof(*m));
 	m->wlr_output = wlr_output;
+	wl_list_init(&m->workspaces);
+	for (i = 1; i <= 9; i++) {
+		workspace_create(m, (int)i, NULL);
+	}
+	m->active_workspace = workspace_get_by_id(m, 1);
 
 	for (i = 0; i < LENGTH(m->layers); i++)
 		wl_list_init(&m->layers[i]);
 
 	wlr_output_state_init(&state);
 	/* Initialize monitor state using configured rules */
-	m->tagset[0] = m->tagset[1] = 1;
 	for (r = monrules; r < END(monrules); r++) {
 		if (!r->name || strstr(wlr_output->name, r->name)) {
 			m->m.x = r->x;
@@ -127,6 +131,13 @@ cleanupmon(struct wl_listener *listener, void *data)
 	wlr_scene_output_destroy(m->scene_output);
 
 	closemon(m);
+	{
+		Workspace *ws, *tmp_ws;
+		wl_list_for_each_safe(ws, tmp_ws, &m->workspaces, link) {
+			workspace_destroy(ws);
+		}
+	}
+	m->active_workspace = NULL;
 	wlr_scene_node_destroy(&m->fullscreen_bg->node);
 	free(m);
 }
@@ -154,7 +165,7 @@ closemon(Monitor *m)
 			resize(c, (struct wlr_box){.x = c->geom.x - m->w.width, .y = c->geom.y,
 					.width = c->geom.width, .height = c->geom.height}, 0);
 		if (c->mon == m)
-			setmon(c, selmon, c->tags);
+			setmon(c, selmon);
 	}
 	focusclient(focustop(selmon), 1);
 	printstatus();
@@ -246,7 +257,7 @@ updatemons(struct wl_listener *listener, void *data)
 	if (selmon && selmon->wlr_output->enabled) {
 		wl_list_for_each(c, &clients, link) {
 			if (!c->mon && client_surface(c)->mapped)
-				setmon(c, selmon, c->tags);
+				setmon(c, selmon);
 		}
 		focusclient(focustop(selmon), 1);
 		if (selmon->lock_surface) {

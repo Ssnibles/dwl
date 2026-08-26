@@ -3,24 +3,28 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "dwl.h"
 #include "layout.h"
 #include "client.h"
 #include "config.h"
+#include "tree.h"
+#include "workspace.h"
 
 void
 arrange(Monitor *m)
 {
 	Client *c;
 
-	if (!m->wlr_output->enabled)
+	if (!m || !m->wlr_output->enabled)
 		return;
 
 	wl_list_for_each(c, &clients, link) {
 		if (c->mon == m) {
-			wlr_scene_node_set_enabled(&c->scene->node, VISIBLEON(c, m));
-			client_set_suspended(c, !VISIBLEON(c, m));
+			int visible = (c->ws == m->active_workspace);
+			wlr_scene_node_set_enabled(&c->scene->node, visible);
+			client_set_suspended(c, !visible);
 		}
 	}
 
@@ -45,163 +49,280 @@ arrange(Monitor *m)
 		overview(m);
 	else if (m->lt[m->sellt]->arrange)
 		m->lt[m->sellt]->arrange(m);
+
 	motionnotify(0, NULL, 0, 0, 0, 0);
 	checkidleinhibitor(NULL);
 }
 
 void
-fibonacci(Monitor *m, int s)
+tree_layout(Monitor *m)
 {
-	unsigned int i, n = 0;
-	int nx, ny, nw, nh;
-	int g = (int)gappx;
-	Client *c;
+	if (!m || !m->active_workspace || !m->active_workspace->root)
+		return;
+	node_arrange_recursive(m->active_workspace->root, m->w);
+}
 
-	wl_list_for_each(c, &clients, link)
-		if (VISIBLEON(c, m) && !c->isfloating && !c->isfullscreen)
-			n++;
-	if (n == 0)
+void
+bsp_layout(Monitor *m)
+{
+	tree_layout(m);
+}
+
+static void
+dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth)
+{
+	int g = (int)gappx;
+	struct wlr_box b1, b2;
+	int i;
+
+	if (count <= 0)
 		return;
 
-	nx = m->w.x + g;
-	ny = m->w.y + g;
-	nw = m->w.width - 2 * g;
-	nh = m->w.height - 2 * g;
-
-	i = 0;
-	wl_list_for_each(c, &clients, link) {
-		if (!VISIBLEON(c, m) || c->isfloating || c->isfullscreen)
-			continue;
-
-		if (i < n - 1) {
-			if (s == 0) { /* dwindle: alternate split 50/50 horizontally and vertically */
-				if (i % 2 == 0) { /* horizontal split (50% left, 50% right) */
-					int half_w = MAX(1, (nw - g) / 2);
-					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = half_w, .height = nh}, 0);
-					nx += half_w + g;
-					nw = MAX(1, nw - half_w - g);
-				} else { /* vertical split (50% top, 50% bottom) */
-					int half_h = MAX(1, (nh - g) / 2);
-					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = nw, .height = half_h}, 0);
-					ny += half_h + g;
-					nh = MAX(1, nh - half_h - g);
-				}
-			} else { /* spiral: rotate split 50/50 right -> down -> left -> up */
-				if (i % 4 == 0) {
-					int half_w = MAX(1, (nw - g) / 2);
-					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = half_w, .height = nh}, 0);
-					nx += half_w + g;
-					nw = MAX(1, nw - half_w - g);
-				} else if (i % 4 == 1) {
-					int half_h = MAX(1, (nh - g) / 2);
-					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = nw, .height = half_h}, 0);
-					ny += half_h + g;
-					nh = MAX(1, nh - half_h - g);
-				} else if (i % 4 == 2) {
-					int half_w = MAX(1, (nw - g) / 2);
-					resize(c, (struct wlr_box){.x = nx + half_w + g, .y = ny, .width = MAX(1, nw - half_w - g), .height = nh}, 0);
-					nw = half_w;
-				} else {
-					int half_h = MAX(1, (nh - g) / 2);
-					resize(c, (struct wlr_box){.x = nx, .y = ny + half_h + g, .width = nw, .height = MAX(1, nh - half_h - g)}, 0);
-					nh = half_h;
-				}
-			}
-		} else {
-			resize(c, (struct wlr_box){.x = nx, .y = ny, .width = nw, .height = nh}, 0);
-		}
-		i++;
+	if (count == 1) {
+		struct wlr_box gbox = {
+			.x = box.x + g,
+			.y = box.y + g,
+			.width = MAX(1, box.width - 2 * g),
+			.height = MAX(1, box.height - 2 * g)
+		};
+		resize(leaves[0], gbox, 0);
+		return;
 	}
+
+	b1 = box;
+	b2 = box;
+
+	int is_horiz = (depth % 2 == 0);
+	float r1 = (leaves[0]->node && (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) > 0.05f)
+		? (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) : 1.0f;
+	float r2 = 0.0f;
+	for (i = 1; i < count; i++) {
+		float r = (leaves[i]->node && (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) > 0.05f)
+			? (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) : 1.0f;
+		r2 += r;
+	}
+	r2 /= (float)(count - 1);
+
+	float ratio_factor = r1 / (r1 + r2);
+
+	if (is_horiz) {
+		int w = (int)roundf((float)box.width * ratio_factor);
+		w = MAX(1, MIN(box.width - 1, w));
+		b1.width = w;
+		b2.x = box.x + w;
+		b2.width = box.width - w;
+	} else {
+		int h = (int)roundf((float)box.height * ratio_factor);
+		h = MAX(1, MIN(box.height - 1, h));
+		b1.height = h;
+		b2.y = box.y + h;
+		b2.height = box.height - h;
+	}
+
+	{
+		struct wlr_box gbox = {
+			.x = b1.x + g,
+			.y = b1.y + g,
+			.width = MAX(1, b1.width - 2 * g),
+			.height = MAX(1, b1.height - 2 * g)
+		};
+		resize(leaves[0], gbox, 0);
+	}
+
+	dwindle_recursive(leaves + 1, count - 1, b2, depth + 1);
 }
 
 void
 dwindle(Monitor *m)
 {
-	fibonacci(m, 0);
-}
+	Client *leaves[128];
+	int n;
 
-void
-incnmaster(const Arg *arg)
-{
-	if (!arg || !selmon)
+	if (!m || !m->active_workspace || !m->active_workspace->root)
 		return;
-	selmon->nmaster = MAX(selmon->nmaster + arg->i, 0);
-	arrange(selmon);
+
+	n = node_collect_leaves(m->active_workspace->root, leaves, 128);
+	if (n == 0)
+		return;
+
+	dwindle_recursive(leaves, n, m->w, 0);
 }
 
-void
-monocle(Monitor *m)
+static void
+spiral_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 {
-	Client *c;
-	int n = 0;
 	int g = (int)gappx;
-	struct wlr_box gbox;
+	struct wlr_box b1, b2;
+	int i;
 
-	wl_list_for_each(c, &clients, link) {
-		if (!VISIBLEON(c, m) || c->isfloating || c->isfullscreen)
-			continue;
-		gbox = (struct wlr_box){
-			.x = m->w.x + g,
-			.y = m->w.y + g,
-			.width = m->w.width - 2 * g,
-			.height = m->w.height - 2 * g,
+	if (count <= 0)
+		return;
+
+	if (count == 1) {
+		struct wlr_box gbox = {
+			.x = box.x + g,
+			.y = box.y + g,
+			.width = MAX(1, box.width - 2 * g),
+			.height = MAX(1, box.height - 2 * g)
 		};
-		resize(c, gbox, 0);
-		n++;
+		resize(leaves[0], gbox, 0);
+		return;
 	}
-	if (n)
-		snprintf(m->ltsymbol, LENGTH(m->ltsymbol), "[%d]", n);
-	if ((c = focustop(m)))
-		wlr_scene_node_raise_to_top(&c->scene->node);
+
+	b1 = box;
+	b2 = box;
+
+	int is_horiz = (depth % 2 == 0);
+	float r1 = (leaves[0]->node && (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) > 0.05f)
+		? (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) : 1.0f;
+	float r2 = 0.0f;
+	for (i = 1; i < count; i++) {
+		float r = (leaves[i]->node && (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) > 0.05f)
+			? (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) : 1.0f;
+		r2 += r;
+	}
+	r2 /= (float)(count - 1);
+
+	float ratio_factor = r1 / (r1 + r2);
+
+	switch (depth % 4) {
+	case 0:
+		{
+			int w = (int)roundf((float)box.width * ratio_factor);
+			w = MAX(1, MIN(box.width - 1, w));
+			b1.width = w;
+			b2.x = box.x + w;
+			b2.width = box.width - w;
+		}
+		break;
+	case 1:
+		{
+			int h = (int)roundf((float)box.height * ratio_factor);
+			h = MAX(1, MIN(box.height - 1, h));
+			b1.height = h;
+			b2.y = box.y + h;
+			b2.height = box.height - h;
+		}
+		break;
+	case 2:
+		{
+			int w = (int)roundf((float)box.width * (1.0f - ratio_factor));
+			w = MAX(1, MIN(box.width - 1, w));
+			b1.x = box.x + w;
+			b1.width = box.width - w;
+			b2.width = w;
+		}
+		break;
+	case 3:
+		{
+			int h = (int)roundf((float)box.height * (1.0f - ratio_factor));
+			h = MAX(1, MIN(box.height - 1, h));
+			b1.y = box.y + h;
+			b1.height = box.height - h;
+			b2.height = h;
+		}
+		break;
+	}
+
+	{
+		struct wlr_box gbox = {
+			.x = b1.x + g,
+			.y = b1.y + g,
+			.width = MAX(1, b1.width - 2 * g),
+			.height = MAX(1, b1.height - 2 * g)
+		};
+		resize(leaves[0], gbox, 0);
+	}
+
+	spiral_recursive(leaves + 1, count - 1, b2, depth + 1);
 }
 
 void
-setlayout(const Arg *arg)
+fibonacci(Monitor *m, int s)
 {
-	if (!selmon)
-		return;
-	if (!arg || !arg->v || arg->v != selmon->lt[selmon->sellt])
-		selmon->sellt ^= 1;
-	if (arg && arg->v)
-		selmon->lt[selmon->sellt] = (Layout *)arg->v;
-	strncpy(selmon->ltsymbol, selmon->lt[selmon->sellt]->symbol, LENGTH(selmon->ltsymbol));
-	arrange(selmon);
-	printstatus();
-}
-
-/* arg > 1.0 will set mfact absolutely */
-void
-setmfact(const Arg *arg)
-{
-	float f;
-
-	if (!arg || !selmon || !selmon->lt[selmon->sellt]->arrange)
-		return;
-	f = arg->f < 1.0f ? arg->f + selmon->mfact : arg->f - 1.0f;
-	if (f < 0.1 || f > 0.9)
-		return;
-	selmon->mfact = f;
-	arrange(selmon);
+	spiral(m);
 }
 
 void
 spiral(Monitor *m)
 {
-	fibonacci(m, 1);
+	Client *leaves[128];
+	int n;
+
+	if (!m || !m->active_workspace || !m->active_workspace->root)
+		return;
+
+	n = node_collect_leaves(m->active_workspace->root, leaves, 128);
+	if (n == 0)
+		return;
+
+	spiral_recursive(leaves, n, m->w, 0);
+}
+
+void
+columns(Monitor *m)
+{
+	Client *leaves[128];
+	int i, n;
+	int g = (int)gappx;
+	int x, w;
+	float total_ratio = 0.0f;
+	int avail_w;
+
+	if (!m || !m->active_workspace || !m->active_workspace->root)
+		return;
+
+	n = node_collect_leaves(m->active_workspace->root, leaves, 128);
+	if (n == 0)
+		return;
+
+	for (i = 0; i < n; i++)
+		total_ratio += (leaves[i]->node && leaves[i]->node->ratio_h > 0.05f) ? leaves[i]->node->ratio_h : 1.0f;
+	if (total_ratio <= 0.0f)
+		total_ratio = (float)n;
+
+	x = m->w.x + g;
+	avail_w = m->w.width - g * (n + 1);
+
+	for (i = 0; i < n; i++) {
+		float r = (leaves[i]->node && leaves[i]->node->ratio_h > 0.05f) ? leaves[i]->node->ratio_h : 1.0f;
+		if (i == n - 1)
+			w = m->w.x + m->w.width - g - x;
+		else
+			w = (int)roundf((float)avail_w * (r / total_ratio));
+		w = MAX(1, w);
+		resize(leaves[i], (struct wlr_box){
+			.x = x,
+			.y = m->w.y + g,
+			.width = w,
+			.height = MAX(1, m->w.height - 2 * g)
+		}, 0);
+		x += w + g;
+	}
+}
+
+void
+master_stack(Monitor *m)
+{
+	tile(m);
 }
 
 void
 tile(Monitor *m)
 {
+	Client *leaves[128];
 	unsigned int mw, my, ty;
 	int i, n = 0, nm, ns;
 	int g = (int)gappx;
 	int mx, mw_final, sx, sw_final;
 	Client *c;
+	float total_m_ratio = 0.0f, total_s_ratio = 0.0f;
+	int avail_m_h, avail_s_h;
 
-	wl_list_for_each(c, &clients, link)
-		if (VISIBLEON(c, m) && !c->isfloating && !c->isfullscreen)
-			n++;
+	if (!m || !m->active_workspace || !m->active_workspace->root)
+		return;
+
+	n = node_collect_leaves(m->active_workspace->root, leaves, 128);
 	if (n == 0)
 		return;
 
@@ -228,22 +349,110 @@ tile(Monitor *m)
 		sw_final = mw_final;
 	}
 
-	i = my = ty = 0;
-	wl_list_for_each(c, &clients, link) {
-		if (!VISIBLEON(c, m) || c->isfloating || c->isfullscreen)
-			continue;
+	for (i = 0; i < n; i++) {
+		float r = (leaves[i]->node && leaves[i]->node->ratio_v > 0.05f) ? leaves[i]->node->ratio_v : 1.0f;
+		if (i < nm)
+			total_m_ratio += r;
+		else
+			total_s_ratio += r;
+	}
+	if (total_m_ratio <= 0.0f) total_m_ratio = (float)nm;
+	if (total_s_ratio <= 0.0f) total_s_ratio = (float)ns;
+
+	avail_m_h = m->w.height - g * (nm + 1);
+	avail_s_h = m->w.height - g * (ns + 1);
+
+	my = ty = 0;
+	for (i = 0; i < n; i++) {
+		c = leaves[i];
+		float r = (c->node && c->node->ratio_v > 0.05f) ? c->node->ratio_v : 1.0f;
 		if (i < m->nmaster) {
-			int h = (m->w.height - my - g * (nm - i + 1)) / (nm - i);
+			int h;
+			if (i == nm - 1)
+				h = m->w.height - my - g * 2;
+			else
+				h = (int)roundf((float)avail_m_h * (r / total_m_ratio));
+			h = MAX(1, h);
 			resize(c, (struct wlr_box){.x = mx, .y = m->w.y + my + g, .width = mw_final, .height = h}, 0);
 			my += h + g;
 		} else {
 			int k = i - m->nmaster;
-			int h = (m->w.height - ty - g * (ns - k + 1)) / (ns - k);
+			int h;
+			if (i == n - 1)
+				h = m->w.height - ty - g * 2;
+			else
+				h = (int)roundf((float)avail_s_h * (r / total_s_ratio));
+			h = MAX(1, h);
 			resize(c, (struct wlr_box){.x = sx, .y = m->w.y + ty + g, .width = sw_final, .height = h}, 0);
 			ty += h + g;
 		}
-		i++;
 	}
+}
+
+void
+monocle(Monitor *m)
+{
+	Client *leaves[128];
+	Client *c;
+	int i, n;
+	int g = (int)gappx;
+	struct wlr_box gbox;
+
+	if (!m || !m->active_workspace || !m->active_workspace->root)
+		return;
+
+	n = node_collect_leaves(m->active_workspace->root, leaves, 128);
+	gbox = (struct wlr_box){
+		.x = m->w.x + g,
+		.y = m->w.y + g,
+		.width = MAX(1, m->w.width - 2 * g),
+		.height = MAX(1, m->w.height - 2 * g),
+	};
+
+	for (i = 0; i < n; i++)
+		resize(leaves[i], gbox, 0);
+
+	if (n)
+		snprintf(m->ltsymbol, LENGTH(m->ltsymbol), "[%d]", n);
+	if ((c = focustop(m)))
+		wlr_scene_node_raise_to_top(&c->scene->node);
+}
+
+void
+incnmaster(const Arg *arg)
+{
+	if (!arg || !selmon)
+		return;
+	selmon->nmaster = MAX(selmon->nmaster + arg->i, 0);
+	arrange(selmon);
+}
+
+void
+setlayout(const Arg *arg)
+{
+	if (!selmon)
+		return;
+	if (!arg || !arg->v || arg->v != selmon->lt[selmon->sellt])
+		selmon->sellt ^= 1;
+	if (arg && arg->v)
+		selmon->lt[selmon->sellt] = (Layout *)arg->v;
+	strncpy(selmon->ltsymbol, selmon->lt[selmon->sellt]->symbol, LENGTH(selmon->ltsymbol));
+	arrange(selmon);
+	printstatus();
+}
+
+void
+setmfact(const Arg *arg)
+{
+	float f;
+
+	if (!arg || !selmon || !selmon->lt[selmon->sellt]->arrange)
+		return;
+	f = arg->f < 1.0f ? arg->f + selmon->mfact : arg->f - 1.0f;
+	if (f < 0.1f || f > 0.9f)
+		return;
+	selmon->mfact = f;
+	arrange(selmon);
 }
 
 /* Overview Mode Grid Layout Algorithm */
@@ -265,11 +474,9 @@ overview(Monitor *m)
 		return;
 	}
 
-	/* Calculate optimal column and row count for N windows */
 	cols = (unsigned int)ceil(sqrt((double)n));
 	rows = (n + cols - 1) / cols;
 
-	/* Screen margin insets (4%) */
 	inset_x = (int)(m->w.width * 0.04f);
 	inset_y = (int)(m->w.height * 0.04f);
 	available_w = m->w.width - (inset_x * 2);
@@ -331,7 +538,6 @@ static const uint8_t font5x7[26][7] = {
 	{0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}, /* T */
 	{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}, /* U */
 	{0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04}, /* V */
-	{0x11, 0x11, 0x11, 0x15, 0x15, 0x1B, 0x11}, /* W */
 	{0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11}, /* X */
 	{0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04}, /* Y */
 	{0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}, /* Z */
@@ -419,7 +625,6 @@ updatelabeloverlays(Monitor *m)
 	}
 }
 
-/* Toggles Overview Mode on/off */
 void
 toggleoverview(const Arg *arg)
 {
@@ -428,8 +633,6 @@ toggleoverview(const Arg *arg)
 		return;
 
 	if (!selmon->isoverview) {
-		/* Save geometries and current tagset when entering overview mode */
-		selmon->prevtagset = selmon->tagset[selmon->seltags];
 		wl_list_for_each(c, &clients, link) {
 			if (c->mon == selmon)
 				c->prev = c->geom;
@@ -437,14 +640,9 @@ toggleoverview(const Arg *arg)
 		selmon->isoverview = 1;
 		focusclient(focustop(selmon), 1);
 	} else {
-		/* Exit overview mode and jump tag to selected client */
 		Client *sel = focustop(selmon);
 		clearlabeloverlays(selmon);
 		selmon->isoverview = 0;
-		if (sel && sel->tags)
-			selmon->tagset[selmon->seltags] = sel->tags;
-		else
-			selmon->tagset[selmon->seltags] = selmon->prevtagset;
 
 		wl_list_for_each(c, &clients, link) {
 			if (c->mon == selmon && c->isfloating)
@@ -464,7 +662,6 @@ toggleoverview(const Arg *arg)
 	printstatus();
 }
 
-/* Directional 2D Spatial Focus */
 void
 focusdir(const Arg *arg)
 {
@@ -497,61 +694,31 @@ focusdir(const Arg *arg)
 
 		switch (dir) {
 		case WLR_DIRECTION_LEFT:
-			if (dx < -1.0) {
-				in_dir = 1;
-				primary = -dx;
-				secondary = fabs(dy);
-			}
+			if (dx < -1.0) { in_dir = 1; primary = -dx; secondary = fabs(dy); }
 			break;
 		case WLR_DIRECTION_RIGHT:
-			if (dx > 1.0) {
-				in_dir = 1;
-				primary = dx;
-				secondary = fabs(dy);
-			}
+			if (dx > 1.0) { in_dir = 1; primary = dx; secondary = fabs(dy); }
 			break;
 		case WLR_DIRECTION_UP:
-			if (dy < -1.0) {
-				in_dir = 1;
-				primary = -dy;
-				secondary = fabs(dx);
-			}
+			if (dy < -1.0) { in_dir = 1; primary = -dy; secondary = fabs(dx); }
 			break;
 		case WLR_DIRECTION_DOWN:
-			if (dy > 1.0) {
-				in_dir = 1;
-				primary = dy;
-				secondary = fabs(dx);
-			}
+			if (dy > 1.0) { in_dir = 1; primary = dy; secondary = fabs(dx); }
 			break;
 		}
 
 		if (in_dir) {
-			/* Weight primary distance and penalize orthogonal deviation */
 			dist = primary * primary + 3.0 * secondary * secondary;
 			if (dist < min_dist) {
 				min_dist = dist;
 				best = tc;
 			}
 		} else {
-			/* Candidate for wrap-around */
 			switch (dir) {
-			case WLR_DIRECTION_LEFT:
-				wrap_primary = tx; /* rightmost */
-				wrap_secondary = fabs(dy);
-				break;
-			case WLR_DIRECTION_RIGHT:
-				wrap_primary = -tx; /* leftmost */
-				wrap_secondary = fabs(dy);
-				break;
-			case WLR_DIRECTION_UP:
-				wrap_primary = ty; /* bottommost */
-				wrap_secondary = fabs(dx);
-				break;
-			case WLR_DIRECTION_DOWN:
-				wrap_primary = -ty; /* topmost */
-				wrap_secondary = fabs(dx);
-				break;
+			case WLR_DIRECTION_LEFT: wrap_primary = tx; wrap_secondary = fabs(dy); break;
+			case WLR_DIRECTION_RIGHT: wrap_primary = -tx; wrap_secondary = fabs(dy); break;
+			case WLR_DIRECTION_UP: wrap_primary = ty; wrap_secondary = fabs(dx); break;
+			case WLR_DIRECTION_DOWN: wrap_primary = -ty; wrap_secondary = fabs(dx); break;
 			}
 			wdist = -wrap_primary * 1000.0 + wrap_secondary;
 			if (wdist < wrap_dist) {
@@ -568,7 +735,6 @@ focusdir(const Arg *arg)
 		focusclient(best, 1);
 }
 
-/* Cycles window focus through focus stack */
 void
 focusstack(const Arg *arg)
 {

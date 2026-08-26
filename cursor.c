@@ -83,6 +83,7 @@ buttonpress(struct wl_listener *listener, void *data)
 		/* If you released any buttons, we exit interactive move/resize mode. */
 		/* TODO: should reset to the pointer focus's current setcursor */
 		if (!locked && cursor_mode != CurNormal && cursor_mode != CurPressed) {
+			int was_resize = (cursor_mode == CurResize);
 			wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
 			cursor_mode = CurNormal;
 			/* Drop the window off on its new monitor */
@@ -92,9 +93,32 @@ buttonpress(struct wl_listener *listener, void *data)
 					m = grabc->mon ? grabc->mon : selmon;
 				if (m) {
 					selmon = m;
-					setmon(grabc, selmon, 0);
+					setmon(grabc, selmon);
 				}
 				if (grabc_was_tiled) {
+					if (was_resize && grabc->node) {
+						int old_w = grabc->prev.width;
+						int old_h = grabc->prev.height;
+						int new_w = grabc->geom.width;
+						int new_h = grabc->geom.height;
+
+						float scale_w = (old_w > 0) ? (float)new_w / (float)old_w : 1.0f;
+						float scale_h = (old_h > 0) ? (float)new_h / (float)old_h : 1.0f;
+						float scale = (scale_w != 1.0f) ? scale_w : scale_h;
+
+						if (scale > 0.05f && scale < 20.0f) {
+							grabc->node->ratio *= scale;
+							if (grabc->node->ratio < 0.1f) grabc->node->ratio = 0.1f;
+							if (grabc->node->ratio > 10.0f) grabc->node->ratio = 10.0f;
+						}
+
+						if (selmon && (selmon->lt[selmon->sellt]->arrange == tile || selmon->lt[selmon->sellt]->arrange == master_stack)) {
+							if (scale_w != 1.0f && selmon->w.width > 0) {
+								float delta_mfact = (float)(new_w - old_w) / (float)selmon->w.width;
+								selmon->mfact = MIN(0.9f, MAX(0.1f, selmon->mfact + delta_mfact));
+							}
+						}
+					}
 					Client *tc, *at = NULL;
 					double min_dist = 1e9;
 					wl_list_for_each(tc, &clients, link) {

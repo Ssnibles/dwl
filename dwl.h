@@ -75,15 +75,16 @@
 #endif
 
 #include "util.h"
+#include "tree.h"
+#include "workspace.h"
 
 /* macros */
 #define MAX(A, B)               ((A) > (B) ? (A) : (B))
 #define MIN(A, B)               ((A) < (B) ? (A) : (B))
 #define CLEANMASK(mask)         (mask & ~WLR_MODIFIER_CAPS)
-#define VISIBLEON(C, M)         ((M) && (C)->mon == (M) && ((M)->isoverview || ((C)->tags & (M)->tagset[(M)->seltags])))
+#define VISIBLEON(C, M)         ((M) && (C)->mon == (M) && (C)->ws == (M)->active_workspace)
 #define LENGTH(X)               (sizeof X / sizeof X[0])
 #define END(A)                  ((A) + LENGTH(A))
-#define TAGMASK                 ((1u << TAGCOUNT) - 1)
 #define LISTEN(E, L, H)         wl_signal_add((E), ((L)->notify = (H), (L)))
 #define LISTEN_STATIC(E, H)     do { struct wl_listener *_l = ecalloc(1, sizeof(*_l)); _l->notify = (H); wl_signal_add((E), _l); } while (0)
 
@@ -92,12 +93,13 @@ enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
 enum { XDGShell, LayerShell, X11 }; /* client types */
 enum { LyrBg, LyrBottom, LyrTile, LyrFloat, LyrTop, LyrFS, LyrOverlay, LyrBlock, NUM_LAYERS }; /* scene layers */
 
-typedef union {
+typedef union Arg Arg;
+union Arg {
 	int i;
 	uint32_t ui;
 	float f;
 	const void *v;
-} Arg;
+};
 
 typedef struct {
 	unsigned int mod;
@@ -107,7 +109,8 @@ typedef struct {
 } Button;
 
 typedef struct Monitor Monitor;
-typedef struct {
+typedef struct Client Client;
+struct Client {
 	/* Must keep this field first */
 	unsigned int type; /* XDGShell or X11* */
 
@@ -142,12 +145,13 @@ typedef struct {
 	struct wl_listener set_hints;
 #endif
 	unsigned int bw;
-	uint32_t tags;
 	int isfloating, isurgent, isfullscreen;
 	uint32_t resize; /* configure serial of a pending resize */
 	char label;
 	struct wlr_scene_tree *label_tree;
-} Client;
+	Workspace *ws;
+	Node *node;
+};
 
 typedef struct {
 	uint32_t mod;
@@ -186,7 +190,7 @@ typedef struct {
 	struct wl_listener surface_commit;
 } LayerSurface;
 
-typedef struct {
+typedef struct Layout {
 	const char *symbol;
 	void (*arrange)(Monitor *);
 } Layout;
@@ -205,16 +209,15 @@ struct Monitor {
 	struct wlr_box w; /* window area, layout-relative */
 	struct wl_list layers[4]; /* LayerSurface.link */
 	const Layout *lt[2];
-	unsigned int seltags;
 	unsigned int sellt;
-	uint32_t tagset[2];
 	float mfact;
 	int gamma_lut_changed;
 	int nmaster;
 	char ltsymbol[16];
 	int asleep;
 	int isoverview;
-	uint32_t prevtagset;
+	struct wl_list workspaces; /* List of Workspace structs */
+	Workspace *active_workspace;
 };
 
 typedef struct {
@@ -235,7 +238,6 @@ typedef struct {
 typedef struct {
 	const char *id;
 	const char *title;
-	uint32_t tags;
 	int isfloating;
 	int monitor;
 } Rule;
@@ -295,7 +297,7 @@ void pointerfocus(Client *c, struct wlr_surface *surface, double sx, double sy, 
 void printstatus(void);
 void resize(Client *c, struct wlr_box geo, int interact);
 void setfloating(Client *c, int floating);
-void setmon(Client *c, Monitor *m, uint32_t newtags);
+void setmon(Client *c, Monitor *m);
 Monitor *xytomon(double x, double y);
 void xytonode(double x, double y, struct wlr_surface **psurface, Client **pc, LayerSurface **pl, double *nx, double *ny);
 
@@ -310,13 +312,9 @@ void quit(const Arg *arg);
 void setlayout(const Arg *arg);
 void setmfact(const Arg *arg);
 void spawn(const Arg *arg);
-void tag(const Arg *arg);
 void tagmon(const Arg *arg);
 void togglefloating(const Arg *arg);
 void togglefullscreen(const Arg *arg);
-void toggletag(const Arg *arg);
-void toggleview(const Arg *arg);
-void view(const Arg *arg);
 void zoom(const Arg *arg);
 
 /* layout algorithms */
