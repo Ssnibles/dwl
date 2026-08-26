@@ -1,11 +1,15 @@
 /*
- * Attempt to consolidate unavoidable suck into one file, away from dwl.c.  This
- * file is not meant to be pretty.  We use a .h file with static inline
- * functions instead of a separate .c module, or function pointers like sway, so
- * that they will simply compile out if the chosen #defines leave them unused.
+ * DWL - Client / Window Management Header
+ * Declarations and inline helpers for Wayland top-level surfaces and application windows.
  */
 
-/* Leave these functions first; they're used in the others */
+#ifndef CLIENT_H
+#define CLIENT_H
+
+#include "dwl.h"
+
+/* --- Inline Client Utility Helpers --- */
+
 static inline int
 client_is_x11(Client *c)
 {
@@ -88,7 +92,6 @@ end:
 	return type;
 }
 
-/* The others */
 static inline void
 client_activate_surface(struct wlr_surface *s, int activated)
 {
@@ -188,8 +191,6 @@ client_has_children(Client *c)
 	if (client_is_x11(c))
 		return !wl_list_empty(&c->surface.xwayland->children);
 #endif
-	/* surface.xdg->link is never empty because it always contains at least the
-	 * surface itself. */
 	return wl_list_length(&c->surface.xdg->link) > 1;
 }
 
@@ -239,9 +240,6 @@ client_is_float_type(Client *c)
 static inline int
 client_is_rendered_on_mon(Client *c, Monitor *m)
 {
-	/* This is needed for when you don't want to check formal assignment,
-	 * but rather actual displaying of the pixels.
-	 * Usually VISIBLEON suffices and is also faster. */
 	struct wlr_surface_output *s;
 	int unused_lx, unused_ly;
 	if (!wlr_scene_node_coords(&c->scene->node, &unused_lx, &unused_ly))
@@ -264,8 +262,6 @@ client_is_stopped(Client *c)
 
 	wl_client_get_credentials(c->surface.xdg->client->client, &pid, NULL, NULL);
 	if (waitid(P_PID, pid, &in, WNOHANG|WCONTINUED|WSTOPPED|WNOWAIT) < 0) {
-		/* This process is not our child process, while is very unlikely that
-		 * it is stopped, in order to do not skip frames, assume that it is. */
 		if (errno == ECHILD)
 			return 1;
 	} else if (in.si_pid) {
@@ -359,7 +355,7 @@ client_set_tiled(Client *c, uint32_t edges)
 		wlr_xwayland_surface_set_maximized(c->surface.xwayland,
 				edges != WLR_EDGE_NONE, edges != WLR_EDGE_NONE);
 		return;
-  }
+	}
 #endif
 	if (wl_resource_get_version(c->surface.xdg->toplevel->resource)
 			>= XDG_TOPLEVEL_STATE_TILED_RIGHT_SINCE_VERSION) {
@@ -400,3 +396,33 @@ client_wants_fullscreen(Client *c)
 #endif
 	return c->surface.xdg->toplevel->requested.fullscreen;
 }
+
+/* --- Public Client Management Prototypes --- */
+void applybounds(Client *c, struct wlr_box *bbox);
+void applyrules(Client *c);
+void createnotify(struct wl_listener *listener, void *data);
+void createpopup(struct wl_listener *listener, void *data);
+void commitpopup(struct wl_listener *listener, void *data);
+void destroyclient(struct wl_listener *listener, void *data);
+void mapnotify(struct wl_listener *listener, void *data);
+void unmapnotify(struct wl_listener *listener, void *data);
+void commitnotify(struct wl_listener *listener, void *data);
+void focusclient(Client *c, int lift);
+Client *focustop(Monitor *m);
+void killclient(const Arg *arg);
+void setmon(Client *c, Monitor *m, uint32_t newtags);
+void setfloating(Client *c, int floating);
+void setfullscreen(Client *c, int fullscreen);
+void fullscreennotify(struct wl_listener *listener, void *data);
+void maximizenotify(struct wl_listener *listener, void *data);
+void tag(const Arg *arg);
+void toggletag(const Arg *arg);
+void view(const Arg *arg);
+void toggleview(const Arg *arg);
+void urgent(struct wl_listener *listener, void *data);
+void updatetitle(struct wl_listener *listener, void *data);
+void createdecoration(struct wl_listener *listener, void *data);
+void destroydecoration(struct wl_listener *listener, void *data);
+void setdecorationmode(struct wl_listener *listener, void *data);
+
+#endif /* CLIENT_H */

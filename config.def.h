@@ -175,6 +175,7 @@ static const Key keys[] = {
 
 	/* Layout Controls */
 	{ MODKEY,                    XKB_KEY_Tab,         view,             {0} },
+	{ MODKEY,                    XKB_KEY_o,           toggleoverview,   {0} },
 	{ MODKEY,                    XKB_KEY_t,           setlayout,        {.v = &layouts[0]} },
 	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts[2]} },
 	{ MODKEY,                    XKB_KEY_r,           setlayout,        {.v = &layouts[3]} },

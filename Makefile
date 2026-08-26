@@ -16,12 +16,24 @@ PKGS      = wayland-server xkbcommon libinput scenefx-0.4 glesv2 $(XLIBS)
 DWLCFLAGS = `$(PKG_CONFIG) --cflags $(PKGS)` $(WLR_INCS) $(DWLCPPFLAGS) $(DWLDEVCFLAGS) $(CFLAGS)
 LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 
+OBJS = dwl.o util.o client.o monitor.o layout.o input.o layer.o session.o
+
 all: dwl
-dwl: dwl.o util.o
-	$(CC) dwl.o util.o $(DWLCFLAGS) $(LDFLAGS) $(LDLIBS) -o $@
-dwl.o: dwl.c client.h config.h config.mk cursor-shape-v1-protocol.h \
-	pointer-constraints-unstable-v1-protocol.h wlr-layer-shell-unstable-v1-protocol.h \
-	wlr-output-power-management-unstable-v1-protocol.h xdg-shell-protocol.h
+dwl: $(OBJS)
+	$(CC) $(OBJS) $(DWLCFLAGS) $(LDFLAGS) $(LDLIBS) -o $@
+
+HEADERS = dwl.h client.h monitor.h layout.h input.h layer.h session.h config.h config.mk \
+	cursor-shape-v1-protocol.h pointer-constraints-unstable-v1-protocol.h \
+	wlr-layer-shell-unstable-v1-protocol.h wlr-output-power-management-unstable-v1-protocol.h \
+	xdg-shell-protocol.h
+
+dwl.o: dwl.c $(HEADERS)
+client.o: client.c $(HEADERS)
+monitor.o: monitor.c $(HEADERS)
+layout.o: layout.c $(HEADERS)
+input.o: input.c $(HEADERS)
+layer.o: layer.c $(HEADERS)
+session.o: session.c $(HEADERS)
 util.o: util.c util.h
 
 # wayland-scanner is a tool which generates C headers and rigging for Wayland
