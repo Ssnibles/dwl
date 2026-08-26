@@ -2,18 +2,18 @@
  * See LICENSE file for copyright and license details.
  */
 #include "dwl.h"
+#include "rules.h"
 
 
 /* function declarations */
 static void applybounds(Client *c, struct wlr_box *bbox);
-static void applyrules(Client *c);
 static void arrange(Monitor *m);
 static void arrangelayer(Monitor *m, struct wl_list *list,
 		struct wlr_box *usable_area, int exclusive);
 static void arrangelayers(Monitor *m);
 static void axisnotify(struct wl_listener *listener, void *data);
 static void buttonpress(struct wl_listener *listener, void *data);
-static void chvt(const Arg *arg);
+void chvt(const Arg *arg);
 static void checkidleinhibitor(struct wlr_surface *exclude);
 static void cleanup(void);
 static void cleanupmon(struct wl_listener *listener, void *data);
@@ -47,31 +47,31 @@ static void destroypointerconstraint(struct wl_listener *listener, void *data);
 static void destroysessionlock(struct wl_listener *listener, void *data);
 static void destroykeyboardgroup(struct wl_listener *listener, void *data);
 static Monitor *dirtomon(enum wlr_direction dir);
-static void dwindle(Monitor *m);
+void dwindle(Monitor *m);
 static void fibonacci(Monitor *m, int s);
 static void focusclient(Client *c, int lift);
-static void focusmon(const Arg *arg);
-static void focusstack(const Arg *arg);
+void focusmon(const Arg *arg);
+void focusstack(const Arg *arg);
 static Client *focustop(Monitor *m);
 static void fullscreennotify(struct wl_listener *listener, void *data);
 static void gpureset(struct wl_listener *listener, void *data);
 static void handlesig(int signo);
-static void incnmaster(const Arg *arg);
+void incnmaster(const Arg *arg);
 static void inputdevice(struct wl_listener *listener, void *data);
 static int keybinding(uint32_t mods, xkb_keysym_t sym);
 static void keypress(struct wl_listener *listener, void *data);
 static void keypressmod(struct wl_listener *listener, void *data);
 static int keyrepeat(void *data);
-static void killclient(const Arg *arg);
+void killclient(const Arg *arg);
 static void locksession(struct wl_listener *listener, void *data);
 static void mapnotify(struct wl_listener *listener, void *data);
 static void maximizenotify(struct wl_listener *listener, void *data);
-static void monocle(Monitor *m);
+void monocle(Monitor *m);
 static void motionabsolute(struct wl_listener *listener, void *data);
 static void motionnotify(uint32_t time, struct wlr_input_device *device, double sx,
 		double sy, double sx_unaccel, double sy_unaccel);
 static void motionrelative(struct wl_listener *listener, void *data);
-static void moveresize(const Arg *arg);
+void moveresize(const Arg *arg);
 static void outputmgrapply(struct wl_listener *listener, void *data);
 static void outputmgrapplyortest(struct wlr_output_configuration_v1 *config, int test);
 static void outputmgrtest(struct wl_listener *listener, void *data);
@@ -79,7 +79,7 @@ static void pointerfocus(Client *c, struct wlr_surface *surface,
 		double sx, double sy, uint32_t time);
 static void printstatus(void);
 static void powermgrsetmode(struct wl_listener *listener, void *data);
-static void quit(const Arg *arg);
+void quit(const Arg *arg);
 static void rendermon(struct wl_listener *listener, void *data);
 static void requestdecorationmode(struct wl_listener *listener, void *data);
 static void requeststartdrag(struct wl_listener *listener, void *data);
@@ -88,37 +88,37 @@ static void resize(Client *c, struct wlr_box geo, int interact);
 static void run(char *startup_cmd);
 static void setcursor(struct wl_listener *listener, void *data);
 static void setcursorshape(struct wl_listener *listener, void *data);
-static void setfloating(Client *c, int floating);
+void setfloating(Client *c, int floating);
 static void setfullscreen(Client *c, int fullscreen);
-static void setlayout(const Arg *arg);
-static void setmfact(const Arg *arg);
-static void setmon(Client *c, Monitor *m, uint32_t newtags);
+void setlayout(const Arg *arg);
+void setmfact(const Arg *arg);
+void setmon(Client *c, Monitor *m, uint32_t newtags);
 static void setpsel(struct wl_listener *listener, void *data);
 static void setsel(struct wl_listener *listener, void *data);
 static void setup(void);
-static void spawn(const Arg *arg);
-static void spiral(Monitor *m);
+void spawn(const Arg *arg);
+void spiral(Monitor *m);
 static void startdrag(struct wl_listener *listener, void *data);
-static void tag(const Arg *arg);
-static void tagmon(const Arg *arg);
-static void tile(Monitor *m);
-static void togglefloating(const Arg *arg);
-static void togglefullscreen(const Arg *arg);
-static void toggletag(const Arg *arg);
-static void toggleview(const Arg *arg);
+void tag(const Arg *arg);
+void tagmon(const Arg *arg);
+void tile(Monitor *m);
+void togglefloating(const Arg *arg);
+void togglefullscreen(const Arg *arg);
+void toggletag(const Arg *arg);
+void toggleview(const Arg *arg);
 static void unlocksession(struct wl_listener *listener, void *data);
 static void unmaplayersurfacenotify(struct wl_listener *listener, void *data);
 static void unmapnotify(struct wl_listener *listener, void *data);
 static void updatemons(struct wl_listener *listener, void *data);
 static void updatetitle(struct wl_listener *listener, void *data);
 static void urgent(struct wl_listener *listener, void *data);
-static void view(const Arg *arg);
+void view(const Arg *arg);
 static void virtualkeyboard(struct wl_listener *listener, void *data);
 static void virtualpointer(struct wl_listener *listener, void *data);
 static Monitor *xytomon(double x, double y);
 static void xytonode(double x, double y, struct wlr_surface **psurface,
 		Client **pc, LayerSurface **pl, double *nx, double *ny);
-static void zoom(const Arg *arg);
+void zoom(const Arg *arg);
 
 /* variables */
 static pid_t child_pid = -1;
@@ -128,7 +128,7 @@ static struct wl_display *dpy;
 static struct wl_event_loop *event_loop;
 static struct wlr_backend *backend;
 static struct wlr_scene *scene;
-static struct wlr_scene_tree *layers[NUM_LAYERS];
+struct wlr_scene_tree *layers[NUM_LAYERS];
 static struct wlr_scene_tree *drag_icon;
 /* Map from ZWLR_LAYER_SHELL_* constants to Lyr* enum */
 static const int layermap[] = { LyrBg, LyrBottom, LyrTop, LyrOverlay };
@@ -163,7 +163,7 @@ static struct wlr_session_lock_manager_v1 *session_lock_mgr;
 static struct wlr_scene_rect *locked_bg;
 static struct wlr_session_lock_v1 *cur_lock;
 
-static struct wlr_seat *seat;
+struct wlr_seat *seat;
 static KeyboardGroup *kb_group;
 static unsigned int cursor_mode;
 static Client *grabc;
@@ -172,8 +172,8 @@ static int grabc_was_tiled;
 
 static struct wlr_output_layout *output_layout;
 static struct wlr_box sgeom;
-static struct wl_list mons;
-static Monitor *selmon;
+struct wl_list mons;
+Monitor *selmon;
 
 /* global event handlers */
 static struct wl_listener cursor_axis = {.notify = axisnotify};
@@ -240,39 +240,6 @@ applybounds(Client *c, struct wlr_box *bbox)
 		c->geom.x = bbox->x;
 	if (c->geom.y + c->geom.height <= bbox->y)
 		c->geom.y = bbox->y;
-}
-
-void
-applyrules(Client *c)
-{
-	/* rule matching */
-	const char *appid, *title;
-	uint32_t newtags = 0;
-	int i;
-	const Rule *r;
-	Monitor *mon = selmon, *m;
-
-	int isfloating = 0;
-
-	appid = client_get_appid(c);
-	title = client_get_title(c);
-
-	for (r = rules; r < END(rules); r++) {
-		if ((!r->title || strstr(title, r->title))
-				&& (!r->id || strstr(appid, r->id))) {
-			isfloating = r->isfloating;
-			newtags |= r->tags;
-			i = 0;
-			wl_list_for_each(m, &mons, link) {
-				if (r->monitor == i++)
-					mon = m;
-			}
-		}
-	}
-
-	isfloating |= client_is_float_type(c);
-	setmon(c, mon, newtags);
-	setfloating(c, isfloating);
 }
 
 void

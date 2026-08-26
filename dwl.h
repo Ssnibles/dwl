@@ -245,4 +245,40 @@ typedef struct {
 	struct wl_listener destroy;
 } SessionLock;
 
+/* global variables */
+extern struct wl_list mons;
+extern Monitor *selmon;
+extern struct wlr_seat *seat;
+extern struct wlr_scene_tree *layers[NUM_LAYERS];
+
+/* function declarations */
+void setfloating(Client *c, int floating);
+void setmon(Client *c, Monitor *m, uint32_t newtags);
+
+/* action & binding callbacks */
+void chvt(const Arg *arg);
+void focusmon(const Arg *arg);
+void focusstack(const Arg *arg);
+void incnmaster(const Arg *arg);
+void killclient(const Arg *arg);
+void moveresize(const Arg *arg);
+void quit(const Arg *arg);
+void setlayout(const Arg *arg);
+void setmfact(const Arg *arg);
+void spawn(const Arg *arg);
+void tag(const Arg *arg);
+void tagmon(const Arg *arg);
+void togglefloating(const Arg *arg);
+void togglefullscreen(const Arg *arg);
+void toggletag(const Arg *arg);
+void toggleview(const Arg *arg);
+void view(const Arg *arg);
+void zoom(const Arg *arg);
+
+/* layout algorithms */
+void tile(Monitor *m);
+void monocle(Monitor *m);
+void dwindle(Monitor *m);
+void spiral(Monitor *m);
+
 #endif /* DWL_H */
