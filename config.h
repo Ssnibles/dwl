@@ -34,6 +34,8 @@ static const Layout layouts[] = {
 	{ "[]=",      tile },
 	{ "><>",      NULL },
 	{ "[M]",      monocle },
+	{ "[\\]",     dwindle },
+	{ "(@)",      spiral },
 };
 
 /* monitors */
@@ -175,6 +177,8 @@ static const Key keys[] = {
 	{ MODKEY,                    XKB_KEY_Tab,         view,             {0} },
 	{ MODKEY,                    XKB_KEY_t,           setlayout,        {.v = &layouts[0]} },
 	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts[2]} },
+	{ MODKEY,                    XKB_KEY_r,           setlayout,        {.v = &layouts[3]} },
+	{ MODKEY,                    XKB_KEY_s,           setlayout,        {.v = &layouts[4]} },
 
 	/* Tags 1-9 & 0 (Tag 10) */
 	TAGKEYS(          XKB_KEY_1, XKB_KEY_exclam,                        0),
@@ -189,8 +193,8 @@ static const Key keys[] = {
 	TAGKEYS(          XKB_KEY_0, XKB_KEY_parenright,                    9),
 
 	/* Screenshots */
-	{ MODKEY,                    XKB_KEY_s,           spawn,            {.v = ss_crop} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_s,           spawn,            {.v = ss_ocr} },
+	{ 0,                         XKB_KEY_Print,       spawn,            {.v = ss_crop} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_s,           spawn,            {.v = ss_crop} },
 
 	/* Volume Controls */
 	{ 0,                         XKB_KEY_XF86AudioRaiseVolume, spawn,    {.v = volup} },

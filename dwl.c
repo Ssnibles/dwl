@@ -285,6 +285,8 @@ static void destroypointerconstraint(struct wl_listener *listener, void *data);
 static void destroysessionlock(struct wl_listener *listener, void *data);
 static void destroykeyboardgroup(struct wl_listener *listener, void *data);
 static Monitor *dirtomon(enum wlr_direction dir);
+static void dwindle(Monitor *m);
+static void fibonacci(Monitor *m, int s);
 static void focusclient(Client *c, int lift);
 static void focusmon(const Arg *arg);
 static void focusstack(const Arg *arg);
@@ -333,6 +335,7 @@ static void setpsel(struct wl_listener *listener, void *data);
 static void setsel(struct wl_listener *listener, void *data);
 static void setup(void);
 static void spawn(const Arg *arg);
+static void spiral(Monitor *m);
 static void startdrag(struct wl_listener *listener, void *data);
 static void tag(const Arg *arg);
 static void tagmon(const Arg *arg);
@@ -1744,6 +1747,7 @@ mapnotify(struct wl_listener *listener, void *data)
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	Client *p = NULL;
 	Client *w, *c = wl_container_of(listener, c, map);
+	Client *sel = focustop(selmon);
 	Monitor *m;
 
 	/* Create scene tree for this client and its border */
@@ -1780,8 +1784,13 @@ mapnotify(struct wl_listener *listener, void *data)
 	c->geom.width += 2 * c->bw;
 	c->geom.height += 2 * c->bw;
 
-	/* Insert this client into client lists. */
-	wl_list_insert(&clients, &c->link);
+	/* Insert this client into client lists.
+	 * If there is an active tiled window, insert right after it so that
+	 * layout splitting (e.g. dwindle) splits the active window. */
+	if (sel && sel->mon == selmon && VISIBLEON(sel, selmon) && !sel->isfloating)
+		wl_list_insert(&sel->link, &c->link);
+	else
+		wl_list_insert(&clients, &c->link);
 	wl_list_insert(&fstack, &c->flink);
 
 	/* Set initial monitor, tags, floating status, and focus:
@@ -1804,6 +1813,9 @@ unset_fullscreen:
 		if (w != c && w != p && w->isfullscreen && m == w->mon && (w->tags & c->tags))
 			setfullscreen(w, 0);
 	}
+
+	if (!client_is_unmanaged(c))
+		focusclient(c, 1);
 }
 
 void
@@ -2800,6 +2812,83 @@ tile(Monitor *m)
 		}
 		i++;
 	}
+}
+
+void
+fibonacci(Monitor *m, int s)
+{
+	unsigned int i, n = 0;
+	int nx, ny, nw, nh;
+	int g = (int)gappx;
+	Client *c;
+
+	wl_list_for_each(c, &clients, link)
+		if (VISIBLEON(c, m) && !c->isfloating && !c->isfullscreen)
+			n++;
+	if (n == 0)
+		return;
+
+	nx = m->w.x + g;
+	ny = m->w.y + g;
+	nw = m->w.width - 2 * g;
+	nh = m->w.height - 2 * g;
+
+	i = 0;
+	wl_list_for_each(c, &clients, link) {
+		if (!VISIBLEON(c, m) || c->isfloating || c->isfullscreen)
+			continue;
+
+		if (i < n - 1) {
+			if (s == 0) { /* dwindle: alternate split 50/50 horizontally and vertically */
+				if (i % 2 == 0) { /* horizontal split (50% left, 50% right) */
+					int half_w = (nw - g) / 2;
+					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = half_w, .height = nh}, 0);
+					nx += half_w + g;
+					nw -= half_w + g;
+				} else { /* vertical split (50% top, 50% bottom) */
+					int half_h = (nh - g) / 2;
+					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = nw, .height = half_h}, 0);
+					ny += half_h + g;
+					nh -= half_h + g;
+				}
+			} else { /* spiral: rotate split 50/50 right -> down -> left -> up */
+				if (i % 4 == 0) {
+					int half_w = (nw - g) / 2;
+					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = half_w, .height = nh}, 0);
+					nx += half_w + g;
+					nw -= half_w + g;
+				} else if (i % 4 == 1) {
+					int half_h = (nh - g) / 2;
+					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = nw, .height = half_h}, 0);
+					ny += half_h + g;
+					nh -= half_h + g;
+				} else if (i % 4 == 2) {
+					int half_w = (nw - g) / 2;
+					resize(c, (struct wlr_box){.x = nx + half_w + g, .y = ny, .width = nw - half_w - g, .height = nh}, 0);
+					nw = half_w;
+				} else {
+					int half_h = (nh - g) / 2;
+					resize(c, (struct wlr_box){.x = nx, .y = ny + half_h + g, .width = nw, .height = nh - half_h - g}, 0);
+					nh = half_h;
+				}
+			}
+		} else {
+			resize(c, (struct wlr_box){.x = nx, .y = ny, .width = nw, .height = nh}, 0);
+		}
+		i++;
+	}
+}
+
+void
+dwindle(Monitor *m)
+{
+	fibonacci(m, 0);
+}
+
+void
+spiral(Monitor *m)
+{
+	fibonacci(m, 1);
 }
 
 void
