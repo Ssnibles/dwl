@@ -251,15 +251,30 @@ extern struct wl_list mons;
 extern Monitor *selmon;
 extern struct wlr_seat *seat;
 extern struct wlr_scene_tree *layers[NUM_LAYERS];
+extern struct wlr_cursor *cursor;
+extern struct wlr_xcursor_manager *cursor_mgr;
+extern unsigned int cursor_mode;
+extern Client *grabc;
+extern int grabcx, grabcy;
+extern struct wlr_pointer_constraint_v1 *active_constraint;
+extern struct wlr_pointer_constraints_v1 *pointer_constraints;
+extern struct wlr_relative_pointer_manager_v1 *relative_pointer_mgr;
+extern struct wlr_idle_notifier_v1 *idle_notifier;
+extern struct wlr_scene_tree *drag_icon;
+extern int locked;
 
 /* function declarations */
 void checkidleinhibitor(struct wlr_surface *exclude);
+void focusclient(Client *c, int lift);
 Client *focustop(Monitor *m);
 void motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double dy, double dx_unaccel, double dy_unaccel);
+void pointerfocus(Client *c, struct wlr_surface *surface, double sx, double sy, uint32_t time);
 void printstatus(void);
 void resize(Client *c, struct wlr_box geo, int interact);
 void setfloating(Client *c, int floating);
 void setmon(Client *c, Monitor *m, uint32_t newtags);
+Monitor *xytomon(double x, double y);
+void xytonode(double x, double y, struct wlr_surface **psurface, Client **pc, LayerSurface **pl, double *nx, double *ny);
 
 /* action & binding callbacks */
 void chvt(const Arg *arg);
