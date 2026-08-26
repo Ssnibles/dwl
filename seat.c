@@ -16,6 +16,7 @@
 
 #include "dwl.h"
 #include "seat.h"
+#include "layout.h"
 #include "client.h"
 #include "config.h"
 #include "util.h"
@@ -88,6 +89,15 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 	 * processing.
 	 */
 	const Key *k;
+
+	/* Handle ESC / Return in Overview Mode */
+	if (selmon && selmon->isoverview) {
+		if (sym == XKB_KEY_Escape || sym == XKB_KEY_Return) {
+			toggleoverview(NULL);
+			return 1;
+		}
+	}
+
 	for (k = keys; k < END(keys); k++) {
 		if (CLEANMASK(mods) == CLEANMASK(k->mod)
 				&& xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(k->keysym)

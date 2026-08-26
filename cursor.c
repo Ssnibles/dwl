@@ -17,6 +17,7 @@
 
 #include "dwl.h"
 #include "cursor.h"
+#include "layout.h"
 #include "client.h"
 #include "config.h"
 
@@ -57,6 +58,12 @@ buttonpress(struct wl_listener *listener, void *data)
 
 		/* Change focus if the button was _pressed_ over a client */
 		xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+		if (selmon && selmon->isoverview && c) {
+			focusclient(c, 1);
+			toggleoverview(NULL);
+			return;
+		}
+
 		if (c && (!client_is_unmanaged(c) || client_wants_focus(c)))
 			focusclient(c, 1);
 
@@ -261,6 +268,9 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 	 * off of a client or over its border. */
 	if (!surface && !seat->drag)
 		wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
+
+	if (sloppyfocus && c && c != focustop(selmon) && !selmon->isoverview)
+		focusclient(c, 0);
 
 	pointerfocus(c, surface, sx, sy, time);
 }

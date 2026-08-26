@@ -121,15 +121,15 @@ static const Key keys[] = {
 	{ MODKEY,                    XKB_KEY_g,           togglefloating,   {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_r,           quit,             {0} },
 
-	/* Directional Focus (Vim & Arrow keys) - Exactly matching mangowc focusdir */
-	{ MODKEY,                    XKB_KEY_h,           focusstack,       {.i = -1} },
-	{ MODKEY,                    XKB_KEY_l,           focusstack,       {.i = +1} },
-	{ MODKEY,                    XKB_KEY_k,           focusstack,       {.i = -1} },
-	{ MODKEY,                    XKB_KEY_j,           focusstack,       {.i = +1} },
-	{ MODKEY,                    XKB_KEY_Left,        focusstack,       {.i = -1} },
-	{ MODKEY,                    XKB_KEY_Right,       focusstack,       {.i = +1} },
-	{ MODKEY,                    XKB_KEY_Up,          focusstack,       {.i = -1} },
-	{ MODKEY,                    XKB_KEY_Down,        focusstack,       {.i = +1} },
+	/* Directional Focus (Vim & Arrow keys) - Spatial focusdir */
+	{ MODKEY,                    XKB_KEY_h,           focusdir,         {.i = WLR_DIRECTION_LEFT} },
+	{ MODKEY,                    XKB_KEY_l,           focusdir,         {.i = WLR_DIRECTION_RIGHT} },
+	{ MODKEY,                    XKB_KEY_k,           focusdir,         {.i = WLR_DIRECTION_UP} },
+	{ MODKEY,                    XKB_KEY_j,           focusdir,         {.i = WLR_DIRECTION_DOWN} },
+	{ MODKEY,                    XKB_KEY_Left,        focusdir,         {.i = WLR_DIRECTION_LEFT} },
+	{ MODKEY,                    XKB_KEY_Right,       focusdir,         {.i = WLR_DIRECTION_RIGHT} },
+	{ MODKEY,                    XKB_KEY_Up,          focusdir,         {.i = WLR_DIRECTION_UP} },
+	{ MODKEY,                    XKB_KEY_Down,        focusdir,         {.i = WLR_DIRECTION_DOWN} },
 
 	/* Move / Swap Windows (Vim & Arrow keys) - Exactly matching mangowc exchange_client */
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_h,           zoom,             {0} },
@@ -175,6 +175,7 @@ static const Key keys[] = {
 
 	/* Layout Controls */
 	{ MODKEY,                    XKB_KEY_Tab,         view,             {0} },
+	{ MODKEY,                    XKB_KEY_o,           toggleoverview,   {0} },
 	{ MODKEY,                    XKB_KEY_t,           setlayout,        {.v = &layouts[0]} },
 	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts[2]} },
 	{ MODKEY,                    XKB_KEY_r,           setlayout,        {.v = &layouts[3]} },

@@ -5,6 +5,7 @@
 
 #include "dwl.h"
 #include "rules.h"
+#include "layout.h"
 #include "client.h"
 #include "config.h"
 

@@ -9,11 +9,15 @@
 void arrange(Monitor *m);
 void dwindle(Monitor *m);
 void fibonacci(Monitor *m, int s);
+void focusdir(const Arg *arg);
+void focusstack(const Arg *arg);
 void incnmaster(const Arg *arg);
 void monocle(Monitor *m);
+void overview(Monitor *m);
 void setlayout(const Arg *arg);
 void setmfact(const Arg *arg);
 void spiral(Monitor *m);
 void tile(Monitor *m);
+void toggleoverview(const Arg *arg);
 
 #endif /* LAYOUT_H */
