@@ -23,8 +23,6 @@ static const char overview_labels[]        = "ASDFGQWERTZXCVB";
 /* tagging - 10 tags */
 #define TAGCOUNT (10)
 
-/* logging */
-static int log_level = WLR_ERROR;
 
 static const Rule rules[] = {
 	/* app_id             title       tags mask     isfloating   monitor */
@@ -199,6 +197,7 @@ static const Key keys[] = {
 	/* Screenshots */
 	{ 0,                         XKB_KEY_Print,       spawn,            {.v = ss_crop} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_s,           spawn,            {.v = ss_crop} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_s,           spawn,            {.v = ss_ocr} },
 
 	/* Volume Controls */
 	{ 0,                         XKB_KEY_XF86AudioRaiseVolume, spawn,    {.v = volup} },

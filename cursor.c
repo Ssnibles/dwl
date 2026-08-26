@@ -87,8 +87,13 @@ buttonpress(struct wl_listener *listener, void *data)
 			cursor_mode = CurNormal;
 			/* Drop the window off on its new monitor */
 			if (grabc) {
-				selmon = xytomon(cursor->x, cursor->y);
-				setmon(grabc, selmon, 0);
+				Monitor *m = xytomon(cursor->x, cursor->y);
+				if (!m)
+					m = grabc->mon ? grabc->mon : selmon;
+				if (m) {
+					selmon = m;
+					setmon(grabc, selmon, 0);
+				}
 				if (grabc_was_tiled) {
 					Client *tc, *at = NULL;
 					double min_dist = 1e9;

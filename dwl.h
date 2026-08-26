@@ -279,6 +279,7 @@ extern struct wlr_scene_rect *root_bg;
 extern struct wlr_scene_rect *locked_bg;
 extern void *exclusive_focus;
 extern const int layermap[];
+extern int log_level;
 
 /* function declarations */
 void checkidleinhibitor(struct wlr_surface *exclude);

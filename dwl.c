@@ -100,6 +100,7 @@ void zoom(const Arg *arg);
 /* variables */
 static pid_t child_pid = -1;
 int locked;
+int log_level = WLR_ERROR;
 void *exclusive_focus;
 static struct wl_display *dpy;
 struct wl_event_loop *event_loop;
@@ -358,23 +359,27 @@ commitpopup(struct wl_listener *listener, void *data)
 	struct wlr_box box;
 	int type = -1;
 
-	if (!popup->base->initial_commit)
+	if (!popup || !popup->base->initial_commit)
 		return;
 
+	wl_list_remove(&listener->link);
+
 	type = toplevel_from_wlr_surface(popup->base->surface, &c, &l);
-	if (!popup->parent || type < 0)
+	if (!popup->parent || type < 0) {
+		free(listener);
 		return;
+	}
 	popup->base->surface->data = wlr_scene_xdg_surface_create(
 			popup->parent->data, popup->base);
 	if ((l && !l->mon) || (c && !c->mon)) {
 		wlr_xdg_popup_destroy(popup);
+		free(listener);
 		return;
 	}
 	box = type == LayerShell ? l->mon->m : c->mon->w;
 	box.x -= (type == LayerShell ? l->scene->node.x : c->geom.x);
 	box.y -= (type == LayerShell ? l->scene->node.y : c->geom.y);
 	wlr_xdg_popup_unconstrain_from_box(popup, &box);
-	wl_list_remove(&listener->link);
 	free(listener);
 }
 

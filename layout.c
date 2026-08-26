@@ -76,34 +76,34 @@ fibonacci(Monitor *m, int s)
 		if (i < n - 1) {
 			if (s == 0) { /* dwindle: alternate split 50/50 horizontally and vertically */
 				if (i % 2 == 0) { /* horizontal split (50% left, 50% right) */
-					int half_w = (nw - g) / 2;
+					int half_w = MAX(1, (nw - g) / 2);
 					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = half_w, .height = nh}, 0);
 					nx += half_w + g;
-					nw -= half_w + g;
+					nw = MAX(1, nw - half_w - g);
 				} else { /* vertical split (50% top, 50% bottom) */
-					int half_h = (nh - g) / 2;
+					int half_h = MAX(1, (nh - g) / 2);
 					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = nw, .height = half_h}, 0);
 					ny += half_h + g;
-					nh -= half_h + g;
+					nh = MAX(1, nh - half_h - g);
 				}
 			} else { /* spiral: rotate split 50/50 right -> down -> left -> up */
 				if (i % 4 == 0) {
-					int half_w = (nw - g) / 2;
+					int half_w = MAX(1, (nw - g) / 2);
 					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = half_w, .height = nh}, 0);
 					nx += half_w + g;
-					nw -= half_w + g;
+					nw = MAX(1, nw - half_w - g);
 				} else if (i % 4 == 1) {
-					int half_h = (nh - g) / 2;
+					int half_h = MAX(1, (nh - g) / 2);
 					resize(c, (struct wlr_box){.x = nx, .y = ny, .width = nw, .height = half_h}, 0);
 					ny += half_h + g;
-					nh -= half_h + g;
+					nh = MAX(1, nh - half_h - g);
 				} else if (i % 4 == 2) {
-					int half_w = (nw - g) / 2;
-					resize(c, (struct wlr_box){.x = nx + half_w + g, .y = ny, .width = nw - half_w - g, .height = nh}, 0);
+					int half_w = MAX(1, (nw - g) / 2);
+					resize(c, (struct wlr_box){.x = nx + half_w + g, .y = ny, .width = MAX(1, nw - half_w - g), .height = nh}, 0);
 					nw = half_w;
 				} else {
-					int half_h = (nh - g) / 2;
-					resize(c, (struct wlr_box){.x = nx, .y = ny + half_h + g, .width = nw, .height = nh - half_h - g}, 0);
+					int half_h = MAX(1, (nh - g) / 2);
+					resize(c, (struct wlr_box){.x = nx, .y = ny + half_h + g, .width = nw, .height = MAX(1, nh - half_h - g)}, 0);
 					nh = half_h;
 				}
 			}
@@ -456,6 +456,7 @@ toggleoverview(const Arg *arg)
 					sel->geom.x + sel->geom.width / 2,
 					sel->geom.y + sel->geom.height / 2);
 		}
+		focusclient(NULL, 0);
 		focusclient(sel, 1);
 	}
 
