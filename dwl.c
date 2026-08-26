@@ -630,7 +630,7 @@ focusclient(Client *c, int lift)
 {
 	struct wlr_surface *old = seat->keyboard_state.focused_surface;
 	int unused_lx, unused_ly, old_client_type;
-	Client *old_c = NULL;
+	Client *old_c = NULL, *tmp_c;
 	LayerSurface *old_l = NULL;
 
 	if (locked)
@@ -640,6 +640,25 @@ focusclient(Client *c, int lift)
 	if (c && lift)
 		wlr_scene_node_raise_to_top(&c->scene->node);
 
+	/* Put the new client atop the focus stack and select its monitor */
+	if (c && !client_is_unmanaged(c)) {
+		wl_list_remove(&c->flink);
+		wl_list_insert(&fstack, &c->flink);
+		selmon = c->mon;
+		c->isurgent = 0;
+	}
+
+	/* Don't change border color if there is an exclusive focus or we are
+	 * handling a drag operation */
+	if (!exclusive_focus && !seat->drag) {
+		wl_list_for_each(tmp_c, &clients, link) {
+			if (tmp_c == c)
+				client_set_border_color(tmp_c, focuscolor);
+			else if (!tmp_c->isurgent)
+				client_set_border_color(tmp_c, bordercolor);
+		}
+	}
+
 	if (c && client_surface(c) == old)
 		return;
 
@@ -647,19 +666,6 @@ focusclient(Client *c, int lift)
 		struct wlr_xdg_popup *popup, *tmp;
 		wl_list_for_each_safe(popup, tmp, &old_c->surface.xdg->popups, link)
 			wlr_xdg_popup_destroy(popup);
-	}
-
-	/* Put the new client atop the focus stack and select its monitor */
-	if (c && !client_is_unmanaged(c)) {
-		wl_list_remove(&c->flink);
-		wl_list_insert(&fstack, &c->flink);
-		selmon = c->mon;
-		c->isurgent = 0;
-
-		/* Don't change border color if there is an exclusive focus or we are
-		 * handling a drag operation */
-		if (!exclusive_focus && !seat->drag)
-			client_set_border_color(c, focuscolor);
 	}
 
 	/* Deactivate old client if focus is changing */
@@ -676,8 +682,6 @@ focusclient(Client *c, int lift)
 		/* Don't deactivate old client if the new one wants focus, as this causes issues with winecfg
 		 * and probably other clients */
 		} else if (old_c && !client_is_unmanaged(old_c) && (!c || !client_wants_focus(c))) {
-			client_set_border_color(old_c, bordercolor);
-
 			client_activate_surface(old, 0);
 		}
 	}
@@ -720,7 +724,7 @@ focustop(Monitor *m)
 {
 	Client *c;
 	wl_list_for_each(c, &fstack, flink) {
-		if (VISIBLEON(c, m))
+		if (m && m->isoverview ? (c->mon == m) : VISIBLEON(c, m))
 			return c;
 	}
 	return NULL;
@@ -930,8 +934,8 @@ pointerfocus(Client *c, struct wlr_surface *surface, double sx, double sy,
 {
 	struct timespec now;
 
-	if (surface != seat->pointer_state.focused_surface &&
-			sloppyfocus && time && c && !client_is_unmanaged(c))
+	if (sloppyfocus && time && c && !client_is_unmanaged(c) && (!selmon || !selmon->isoverview)
+			&& client_surface(c) != seat->keyboard_state.focused_surface)
 		focusclient(c, 0);
 
 	/* If surface is NULL, clear pointer focus */
@@ -1566,6 +1570,7 @@ unmapnotify(struct wl_listener *listener, void *data)
 		wl_list_remove(&c->flink);
 	}
 
+	destroylabeloverlay(c);
 	wlr_scene_node_destroy(&c->scene->node);
 	printstatus();
 	motionnotify(0, NULL, 0, 0, 0, 0);

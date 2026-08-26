@@ -145,6 +145,8 @@ typedef struct {
 	uint32_t tags;
 	int isfloating, isurgent, isfullscreen;
 	uint32_t resize; /* configure serial of a pending resize */
+	char label;
+	struct wlr_scene_tree *label_tree;
 } Client;
 
 typedef struct {

@@ -53,6 +53,8 @@ buttonpress(struct wl_listener *listener, void *data)
 	case WL_POINTER_BUTTON_STATE_PRESSED:
 		cursor_mode = CurPressed;
 		selmon = xytomon(cursor->x, cursor->y);
+		if (!seat->drag)
+			wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
 		if (locked)
 			break;
 
@@ -263,13 +265,13 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 		return;
 	}
 
-	/* If there's no client surface under the cursor, set the cursor image to a
-	 * default. This is what makes the cursor image appear when you move it
-	 * off of a client or over its border. */
-	if (!surface && !seat->drag)
+	/* If there's no client surface under the cursor or cursor was moved,
+	 * set the cursor image to default. */
+	if ((!surface || time) && !seat->drag)
 		wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
 
-	if (sloppyfocus && c && c != focustop(selmon) && !selmon->isoverview)
+	if (sloppyfocus && time && c && selmon && !selmon->isoverview && !client_is_unmanaged(c)
+			&& client_surface(c) != seat->keyboard_state.focused_surface)
 		focusclient(c, 0);
 
 	pointerfocus(c, surface, sx, sy, time);

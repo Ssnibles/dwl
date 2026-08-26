@@ -89,12 +89,40 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 	 * processing.
 	 */
 	const Key *k;
+	char target_label = '\0', key_ch, lbl_lower;
+	xkb_keysym_t lower_sym;
+	size_t i, len;
+	Client *tc;
 
-	/* Handle ESC / Return in Overview Mode */
+	/* Handle ESC / Return / Jump Labels in Overview Mode */
 	if (selmon && selmon->isoverview) {
 		if (sym == XKB_KEY_Escape || sym == XKB_KEY_Return) {
 			toggleoverview(NULL);
 			return 1;
+		}
+
+		lower_sym = xkb_keysym_to_lower(sym);
+		if (lower_sym >= XKB_KEY_a && lower_sym <= XKB_KEY_z) {
+			key_ch = 'a' + (lower_sym - XKB_KEY_a);
+			len = strlen(overview_labels);
+			for (i = 0; i < len; i++) {
+				lbl_lower = (overview_labels[i] >= 'A' && overview_labels[i] <= 'Z')
+					? ('a' + (overview_labels[i] - 'A')) : overview_labels[i];
+				if (lbl_lower == key_ch) {
+					target_label = overview_labels[i];
+					break;
+				}
+			}
+		}
+
+		if (target_label != '\0') {
+			wl_list_for_each(tc, &clients, link) {
+				if (tc->mon == selmon && tc->label == target_label) {
+					focusclient(tc, 1);
+					toggleoverview(NULL);
+					return 1;
+				}
+			}
 		}
 	}
 
@@ -107,6 +135,14 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 		}
 	}
 	return 0;
+}
+
+static inline int
+is_modifier_keysym(xkb_keysym_t sym)
+{
+	return (sym >= XKB_KEY_Shift_L && sym <= XKB_KEY_Hyper_R)
+		|| sym == XKB_KEY_ISO_Level3_Shift || sym == XKB_KEY_ISO_Level5_Shift
+		|| sym == XKB_KEY_Mode_switch;
 }
 
 void
@@ -127,6 +163,7 @@ keypress(struct wl_listener *listener, void *data)
 	int handled = 0;
 	uint32_t mods = wlr_keyboard_get_modifiers(&group->wlr_group->keyboard);
 
+	wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
 	wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
 
 	/* On _press_ if there is no active screen locker,
@@ -134,6 +171,8 @@ keypress(struct wl_listener *listener, void *data)
 	if (!locked && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 		for (i = 0; i < nsyms; i++)
 			handled = keybinding(mods, syms[i]) || handled;
+		if (!handled && nsyms > 0 && !is_modifier_keysym(syms[0]))
+			wlr_cursor_unset_image(cursor);
 	}
 
 	if (handled && group->wlr_group->keyboard.repeat_info.delay > 0) {
@@ -150,7 +189,6 @@ keypress(struct wl_listener *listener, void *data)
 	if (handled)
 		return;
 
-	wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
 	/* Pass unhandled keycodes along to the client. */
 	wlr_seat_keyboard_notify_key(seat, event->time_msec,
 			event->keycode, event->state);

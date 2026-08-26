@@ -18,6 +18,9 @@ void setlayout(const Arg *arg);
 void setmfact(const Arg *arg);
 void spiral(Monitor *m);
 void tile(Monitor *m);
+void clearlabeloverlays(Monitor *m);
+void destroylabeloverlay(Client *c);
 void toggleoverview(const Arg *arg);
+void updatelabeloverlays(Monitor *m);
 
 #endif /* LAYOUT_H */

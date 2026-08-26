@@ -260,8 +260,10 @@ overview(Monitor *m)
 		if (c->mon == m)
 			n++;
 	}
-	if (n == 0)
+	if (n == 0) {
+		clearlabeloverlays(m);
 		return;
+	}
 
 	/* Calculate optimal column and row count for N windows */
 	cols = (unsigned int)ceil(sqrt((double)n));
@@ -303,6 +305,118 @@ overview(Monitor *m)
 		}, 0);
 		i++;
 	}
+	updatelabeloverlays(m);
+}
+
+static const uint8_t font5x7[26][7] = {
+	{0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}, /* A */
+	{0x1E, 0x11, 0x1E, 0x11, 0x11, 0x1E, 0x00}, /* B */
+	{0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}, /* C */
+	{0x1C, 0x12, 0x11, 0x11, 0x11, 0x12, 0x1C}, /* D */
+	{0x1F, 0x10, 0x1E, 0x10, 0x10, 0x10, 0x1F}, /* E */
+	{0x1F, 0x10, 0x1E, 0x10, 0x10, 0x10, 0x10}, /* F */
+	{0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F}, /* G */
+	{0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}, /* H */
+	{0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E}, /* I */
+	{0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C}, /* J */
+	{0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11}, /* K */
+	{0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F}, /* L */
+	{0x11, 0x1B, 0x15, 0x11, 0x11, 0x11, 0x11}, /* M */
+	{0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11}, /* N */
+	{0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}, /* O */
+	{0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10}, /* P */
+	{0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D}, /* Q */
+	{0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11}, /* R */
+	{0x0E, 0x11, 0x10, 0x0E, 0x01, 0x11, 0x0E}, /* S */
+	{0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}, /* T */
+	{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}, /* U */
+	{0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04}, /* V */
+	{0x11, 0x11, 0x11, 0x15, 0x15, 0x1B, 0x11}, /* W */
+	{0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11}, /* X */
+	{0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04}, /* Y */
+	{0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}, /* Z */
+};
+
+void
+destroylabeloverlay(Client *c)
+{
+	if (!c || !c->label_tree)
+		return;
+	wlr_scene_node_destroy(&c->label_tree->node);
+	c->label_tree = NULL;
+	c->label = '\0';
+}
+
+void
+clearlabeloverlays(Monitor *m)
+{
+	Client *c;
+	wl_list_for_each(c, &clients, link) {
+		if (c->mon == m)
+			destroylabeloverlay(c);
+	}
+}
+
+void
+updatelabeloverlays(Monitor *m)
+{
+	Client *c;
+	int idx = 0;
+	if (!m || !m->isoverview) {
+		clearlabeloverlays(m);
+		return;
+	}
+
+	wl_list_for_each(c, &clients, link) {
+		int font_idx, start_x, start_y, row, col;
+		int num_labels = (int)strlen(overview_labels);
+		char lbl, upper_lbl;
+		struct wlr_scene_rect *bg_inner, *pixel;
+
+		if (c->mon != m) {
+			destroylabeloverlay(c);
+			continue;
+		}
+
+		if (idx >= num_labels) {
+			destroylabeloverlay(c);
+			continue;
+		}
+
+		lbl = overview_labels[idx];
+		idx++;
+
+		if (c->label != lbl || !c->label_tree) {
+			destroylabeloverlay(c);
+			c->label = lbl;
+			c->label_tree = wlr_scene_tree_create(layers[LyrFloat]);
+			if (c->label_tree) {
+				wlr_scene_rect_create(c->label_tree, 36, 36, (float[]){0.1f, 0.1f, 0.15f, 0.95f});
+				bg_inner = wlr_scene_rect_create(c->label_tree, 32, 32, (float[]){0.2f, 0.5f, 0.9f, 1.0f});
+				wlr_scene_node_set_position(&bg_inner->node, 2, 2);
+
+				upper_lbl = (lbl >= 'a' && lbl <= 'z') ? ('A' + (lbl - 'a')) : lbl;
+				font_idx = (upper_lbl >= 'A' && upper_lbl <= 'Z') ? (upper_lbl - 'A') : 0;
+				start_x = 10;
+				start_y = 7;
+				for (row = 0; row < 7; row++) {
+					for (col = 0; col < 5; col++) {
+						if ((font5x7[font_idx][row] >> (4 - col)) & 1) {
+							pixel = wlr_scene_rect_create(c->label_tree, 3, 3, (float[]){1.0f, 1.0f, 1.0f, 1.0f});
+							wlr_scene_node_set_position(&pixel->node, start_x + col * 3, start_y + row * 3);
+						}
+					}
+				}
+			}
+		}
+
+		if (c->label_tree) {
+			int badge_x = c->geom.x + (c->geom.width - 36) / 2;
+			int badge_y = c->geom.y + (c->geom.height - 36) / 2;
+			wlr_scene_node_set_position(&c->label_tree->node, badge_x, badge_y);
+			wlr_scene_node_raise_to_top(&c->label_tree->node);
+		}
+	}
 }
 
 /* Toggles Overview Mode on/off */
@@ -325,11 +439,23 @@ toggleoverview(const Arg *arg)
 	} else {
 		/* Exit overview mode and jump tag to selected client */
 		Client *sel = focustop(selmon);
+		clearlabeloverlays(selmon);
 		selmon->isoverview = 0;
 		if (sel && sel->tags)
 			selmon->tagset[selmon->seltags] = sel->tags;
 		else
 			selmon->tagset[selmon->seltags] = selmon->prevtagset;
+
+		wl_list_for_each(c, &clients, link) {
+			if (c->mon == selmon && c->isfloating)
+				resize(c, c->prev, 0);
+		}
+
+		if (sel) {
+			wlr_cursor_warp_closest(cursor, NULL,
+					sel->geom.x + sel->geom.width / 2,
+					sel->geom.y + sel->geom.height / 2);
+		}
 		focusclient(sel, 1);
 	}
 
@@ -360,7 +486,7 @@ focusdir(const Arg *arg)
 		double wrap_primary = 0, wrap_secondary = 0;
 		double dist, wdist;
 
-		if (tc == c || !VISIBLEON(tc, selmon))
+		if (tc == c || (selmon->isoverview ? (tc->mon != selmon) : !VISIBLEON(tc, selmon)))
 			continue;
 
 		tx = tc->geom.x + tc->geom.width / 2.0;
