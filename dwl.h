@@ -246,12 +246,18 @@ typedef struct {
 } SessionLock;
 
 /* global variables */
+extern struct wl_list clients;
 extern struct wl_list mons;
 extern Monitor *selmon;
 extern struct wlr_seat *seat;
 extern struct wlr_scene_tree *layers[NUM_LAYERS];
 
 /* function declarations */
+void checkidleinhibitor(struct wlr_surface *exclude);
+Client *focustop(Monitor *m);
+void motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double dy, double dx_unaccel, double dy_unaccel);
+void printstatus(void);
+void resize(Client *c, struct wlr_box geo, int interact);
 void setfloating(Client *c, int floating);
 void setmon(Client *c, Monitor *m, uint32_t newtags);
 
