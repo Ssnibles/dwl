@@ -264,11 +264,23 @@ extern struct wlr_scene_tree *drag_icon;
 extern int locked;
 extern KeyboardGroup *kb_group;
 extern struct wl_event_loop *event_loop;
+extern struct wlr_output_layout *output_layout;
+extern struct wlr_box sgeom;
+extern struct wlr_scene *scene;
+extern struct wlr_renderer *drw;
+extern struct wlr_allocator *alloc;
+extern struct wlr_output_manager_v1 *output_mgr;
+extern struct wlr_scene_rect *root_bg;
+extern struct wlr_scene_rect *locked_bg;
+extern void *exclusive_focus;
+extern const int layermap[];
 
 /* function declarations */
 void checkidleinhibitor(struct wlr_surface *exclude);
 KeyboardGroup *createkeyboardgroup(void);
 void destroykeyboardgroup(struct wl_listener *listener, void *data);
+void destroylocksurface(struct wl_listener *listener, void *data);
+void requestmonstate(struct wl_listener *listener, void *data);
 void focusclient(Client *c, int lift);
 Client *focustop(Monitor *m);
 int keybinding(uint32_t mods, xkb_keysym_t sym);
