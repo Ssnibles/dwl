@@ -6,9 +6,16 @@
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_scene.h>
 
+#include "server.h"
 #include "dwl.h"
-#include "layers.h"
+#include "tree.h"
+#include "workspace.h"
+#include "rules.h"
 #include "layout.h"
+#include "cursor.h"
+#include "seat.h"
+#include "output.h"
+#include "desktop/layer_shell.h"
 #include "client.h"
 #include "config.h"
 #include "util.h"
