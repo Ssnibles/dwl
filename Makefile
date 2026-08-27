@@ -4,11 +4,12 @@
 
 include config.mk
 
-vpath %.c src
-vpath %.h include
+vpath %.c src src/input src/output src/tree src/desktop src/ipc
+vpath %.h include include/input include/output include/tree include/desktop include/ipc
 
 # flags for compiling
-DWLCPPFLAGS = -Iinclude -I. -DWLR_USE_UNSTABLE -D_POSIX_C_SOURCE=200809L \
+DWLCPPFLAGS = -Iinclude -Iinclude/input -Iinclude/output -Iinclude/tree -Iinclude/desktop -Iinclude/ipc -I. \
+	-DWLR_USE_UNSTABLE -D_POSIX_C_SOURCE=200809L \
 	-DVERSION=\"$(VERSION)\" $(XWAYLAND)
 DWLDEVCFLAGS = -g -Wpedantic -Wall -Wextra -Wdeclaration-after-statement \
 	-Wno-unused-parameter -Wshadow -Wunused-macros -Werror=strict-prototypes \
@@ -26,7 +27,7 @@ PROTO_HDRS = include/cursor-shape-v1-protocol.h \
 	include/wlr-output-power-management-unstable-v1-protocol.h \
 	include/xdg-shell-protocol.h
 
-OBJS = dwl.o util.o rules.o layout.o cursor.o seat.o output.o layers.o tree.o workspace.o
+OBJS = main.o server.o dwl.o util.o rules.o layout.o cursor.o seat.o output.o layers.o tree.o workspace.o
 
 all: dwl
 
@@ -36,7 +37,9 @@ dwl: $(OBJS)
 tree-viewer: src/tree_viewer.c
 	$(CC) src/tree_viewer.c -Iinclude -I. `pkg-config --cflags raylib wlroots-0.19 wayland-server` `pkg-config --libs raylib wlroots-0.19 wayland-server` -lGL -lm -lpthread -ldl -o $@
 
-dwl.o: dwl.c dwl.h tree.h workspace.h rules.h layout.h cursor.h seat.h output.h layers.h util.h client.h include/config.h config.mk $(PROTO_HDRS)
+main.o: main.c server.h dwl.h include/config.h $(PROTO_HDRS)
+server.o: server.c server.h dwl.h tree.h workspace.h rules.h layout.h cursor.h seat.h output.h layers.h util.h client.h include/config.h config.mk $(PROTO_HDRS)
+dwl.o: dwl.c server.h dwl.h tree.h workspace.h rules.h layout.h cursor.h seat.h output.h layers.h util.h client.h include/config.h config.mk $(PROTO_HDRS)
 util.o: util.c util.h
 rules.o: rules.c rules.h dwl.h client.h include/config.h
 layout.o: layout.c layout.h tree.h workspace.h dwl.h client.h include/config.h
