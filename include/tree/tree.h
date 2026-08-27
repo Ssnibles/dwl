@@ -81,6 +81,7 @@ void tree_swap_nodes(Node *a, Node *b);
 void tree_equalize_node(Node *node);
 
 /* User-facing Action & Keybinding Callbacks */
+void tree_mouse_resize(struct Client *grabc, uint32_t grabc_edges, float delta_x, float delta_y);
 void tree_swap_dir(const union Arg *arg);
 void tree_resize_active(const union Arg *arg);
 void tree_resize_dir(const union Arg *arg);

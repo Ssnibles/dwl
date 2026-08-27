@@ -234,48 +234,8 @@ buttonpress(struct wl_listener *listener, void *data)
 					}
 					setfloating(grabc, 0);
 					arrange(selmon);
-				} else if (grabc_was_tiled) {
+				} else if (was_move && grabc_was_tiled) {
 					setfloating(grabc, 0);
-					arrange(selmon);
-				}
-
-				if (was_resize && grabc_was_tiled && grabc->node) {
-					int old_w = grabc_start_geom.width;
-					int old_h = grabc_start_geom.height;
-					int new_w = grabc->geom.width;
-					int new_h = grabc->geom.height;
-					float scale_w = (old_w > 0) ? (float)new_w / (float)old_w : 1.0f;
-					float scale_h = (old_h > 0) ? (float)new_h / (float)old_h : 1.0f;
-					Workspace *ws = grabc->ws ? grabc->ws : (selmon ? selmon->active_workspace : NULL);
-					const Layout *lt = (ws && ws->layout) ? ws->layout : (selmon ? selmon->lt[selmon->sellt] : NULL);
-
-					if (fabsf(scale_w - 1.0f) > 0.01f && scale_w > 0.05f && scale_w < 20.0f)
-						grabc->node->ratio_h = clamp_ratio(grabc->node->ratio_h * scale_w);
-
-					if (fabsf(scale_h - 1.0f) > 0.01f && scale_h > 0.05f && scale_h < 20.0f)
-						grabc->node->ratio_v = clamp_ratio(grabc->node->ratio_v * scale_h);
-
-					if (selmon && lt && (lt->arrange == tile || lt->arrange == master_stack)) {
-						if (fabsf(scale_w - 1.0f) > 0.01f && selmon->w.width > 0) {
-							Client *leaves[128];
-							int n = node_collect_leaves(ws ? ws->root : NULL, leaves, 128);
-							int nm = MIN(n, selmon->nmaster);
-							int is_master = 0;
-							int i;
-							float delta_mfact;
-							for (i = 0; i < nm; i++) {
-								if (leaves[i] == grabc) {
-									is_master = 1;
-									break;
-								}
-							}
-							delta_mfact = (float)(new_w - old_w) / (float)selmon->w.width;
-							if (is_master)
-								selmon->mfact = MIN(0.9f, MAX(0.1f, selmon->mfact + delta_mfact));
-							else
-								selmon->mfact = MIN(0.9f, MAX(0.1f, selmon->mfact - delta_mfact));
-						}
-					}
 					arrange(selmon);
 				}
 			}
@@ -285,6 +245,8 @@ buttonpress(struct wl_listener *listener, void *data)
 			return;
 		}
 		cursor_mode = CurNormal;
+		if (selmon && selmon->active_workspace)
+			tree_export_ipc(selmon->active_workspace);
 		break;
 	}
 	/* If the event wasn't handled by the compositor, notify the client with
@@ -435,7 +397,7 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 	wlr_scene_node_set_position(&drag_icon->node, (int)round(cursor->x), (int)round(cursor->y));
 
 	/* If we are currently grabbing the mouse, handle and return */
-	if (cursor_mode == CurMove) {
+	if (time && cursor_mode == CurMove) {
 		/* Move the grabbed client to the new position. */
 		resize(grabc, (struct wlr_box){.x = (int)round(cursor->x) - grabcx, .y = (int)round(cursor->y) - grabcy,
 			.width = grabc->geom.width, .height = grabc->geom.height}, 1);
@@ -527,51 +489,58 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 
 		in_pointer_focus = 0;
 		return;
-	} else if (cursor_mode == CurResize) {
-		int min_w = grabc->isfloating ? (int)min_width + 2 * (int)grabc->bw : 2 * (int)grabc->bw + 1;
-		int min_h = grabc->isfloating ? (int)min_height + 2 * (int)grabc->bw : 2 * (int)grabc->bw + 1;
-		int fixed_left = grabc_start_geom.x;
-		int fixed_right = grabc_start_geom.x + grabc_start_geom.width;
-		int fixed_top = grabc_start_geom.y;
-		int fixed_bottom = grabc_start_geom.y + grabc_start_geom.height;
-		int new_x = grabc->geom.x;
-		int new_y = grabc->geom.y;
-		int new_w = grabc->geom.width;
-		int new_h = grabc->geom.height;
-
+	} else if (time && cursor_mode == CurResize) {
 		destroy_snap_overlay();
 
-		if (grabc_edges & WLR_EDGE_LEFT) {
-			new_x = (int)round(cursor->x) - grabcx;
-			if (fixed_right - new_x < min_w)
-				new_x = fixed_right - min_w;
-			new_w = fixed_right - new_x;
-		} else if (grabc_edges & WLR_EDGE_RIGHT) {
-			new_x = fixed_left;
-			new_w = (int)round(cursor->x) - fixed_left - grabcx;
-			if (new_w < min_w)
-				new_w = min_w;
-		} else {
-			new_x = fixed_left;
-			new_w = grabc_start_geom.width;
+		if (grabc->isfloating) {
+			int min_w = (int)min_width + 2 * (int)grabc->bw;
+			int min_h = (int)min_height + 2 * (int)grabc->bw;
+			int fixed_left = grabc_start_geom.x;
+			int fixed_right = grabc_start_geom.x + grabc_start_geom.width;
+			int fixed_top = grabc_start_geom.y;
+			int fixed_bottom = grabc_start_geom.y + grabc_start_geom.height;
+			int new_x = grabc->geom.x;
+			int new_y = grabc->geom.y;
+			int new_w = grabc->geom.width;
+			int new_h = grabc->geom.height;
+
+			if (grabc_edges & WLR_EDGE_LEFT) {
+				new_x = (int)round(cursor->x) - grabcx;
+				if (fixed_right - new_x < min_w)
+					new_x = fixed_right - min_w;
+				new_w = fixed_right - new_x;
+			} else if (grabc_edges & WLR_EDGE_RIGHT) {
+				new_x = fixed_left;
+				new_w = (int)round(cursor->x) - fixed_left - grabcx;
+				if (new_w < min_w)
+					new_w = min_w;
+			} else {
+				new_x = fixed_left;
+				new_w = grabc_start_geom.width;
+			}
+
+			if (grabc_edges & WLR_EDGE_TOP) {
+				new_y = (int)round(cursor->y) - grabcy;
+				if (fixed_bottom - new_y < min_h)
+					new_y = fixed_bottom - min_h;
+				new_h = fixed_bottom - new_y;
+			} else if (grabc_edges & WLR_EDGE_BOTTOM) {
+				new_y = fixed_top;
+				new_h = (int)round(cursor->y) - fixed_top - grabcy;
+				if (new_h < min_h)
+					new_h = min_h;
+			} else {
+				new_y = fixed_top;
+				new_h = grabc_start_geom.height;
+			}
+
+			resize(grabc, (struct wlr_box){.x = new_x, .y = new_y, .width = new_w, .height = new_h}, 1);
+		} else if (grabc->node) {
+			float delta_x = (float)dx / (float)(selmon && selmon->w.width > 0 ? selmon->w.width : 1920);
+			float delta_y = (float)dy / (float)(selmon && selmon->w.height > 0 ? selmon->w.height : 1080);
+			tree_mouse_resize(grabc, grabc_edges, delta_x, delta_y);
 		}
 
-		if (grabc_edges & WLR_EDGE_TOP) {
-			new_y = (int)round(cursor->y) - grabcy;
-			if (fixed_bottom - new_y < min_h)
-				new_y = fixed_bottom - min_h;
-			new_h = fixed_bottom - new_y;
-		} else if (grabc_edges & WLR_EDGE_BOTTOM) {
-			new_y = fixed_top;
-			new_h = (int)round(cursor->y) - fixed_top - grabcy;
-			if (new_h < min_h)
-				new_h = min_h;
-		} else {
-			new_y = fixed_top;
-			new_h = grabc_start_geom.height;
-		}
-
-		resize(grabc, (struct wlr_box){.x = new_x, .y = new_y, .width = new_w, .height = new_h}, 1);
 		in_pointer_focus = 0;
 		return;
 	}
@@ -617,10 +586,10 @@ moveresize(const Arg *arg)
 		return;
 
 	destroy_snap_overlay();
-	/* Float the window and tell motionnotify to grab it */
 	grabc_was_tiled = !grabc->isfloating;
 	grabc_start_geom = grabc->geom;
-	setfloating(grabc, 1);
+	if (arg->ui == CurMove && grabc_was_tiled)
+		setfloating(grabc, 1);
 	switch (cursor_mode = arg->ui) {
 	case CurMove:
 		grabcx = (int)round(cursor->x) - grabc->geom.x;
@@ -633,31 +602,37 @@ moveresize(const Arg *arg)
 		cursor_icon = "se-resize";
 
 		grabc_edges = WLR_EDGE_NONE;
-		if (norm_x < 0.35)
-			grabc_edges |= WLR_EDGE_LEFT;
-		else if (norm_x > 0.65)
-			grabc_edges |= WLR_EDGE_RIGHT;
+		{
+			int is_left_zone = (norm_x < 0.35);
+			int is_right_zone = (norm_x > 0.65);
+			int is_top_zone = (norm_y < 0.35);
+			int is_bottom_zone = (norm_y > 0.65);
 
-		if (norm_y < 0.35)
-			grabc_edges |= WLR_EDGE_TOP;
-		else if (norm_y > 0.65)
-			grabc_edges |= WLR_EDGE_BOTTOM;
-
-		if (grabc_edges == WLR_EDGE_NONE) {
-			d_left = fabs(cursor->x - grabc->geom.x);
-			d_right = fabs(cursor->x - (grabc->geom.x + grabc->geom.width));
-			d_top = fabs(cursor->y - grabc->geom.y);
-			d_bottom = fabs(cursor->y - (grabc->geom.y + grabc->geom.height));
-
-			if (d_left < d_right)
+			if (is_left_zone)
 				grabc_edges |= WLR_EDGE_LEFT;
-			else
+			else if (is_right_zone)
 				grabc_edges |= WLR_EDGE_RIGHT;
 
-			if (d_top < d_bottom)
+			if (is_top_zone)
 				grabc_edges |= WLR_EDGE_TOP;
-			else
+			else if (is_bottom_zone)
 				grabc_edges |= WLR_EDGE_BOTTOM;
+
+			if (grabc_edges == WLR_EDGE_NONE) {
+				double min_h, min_v;
+				d_left = fabs(cursor->x - grabc->geom.x);
+				d_right = fabs(cursor->x - (grabc->geom.x + grabc->geom.width));
+				d_top = fabs(cursor->y - grabc->geom.y);
+				d_bottom = fabs(cursor->y - (grabc->geom.y + grabc->geom.height));
+
+				min_h = MIN(d_left, d_right);
+				min_v = MIN(d_top, d_bottom);
+
+				if (min_h < min_v)
+					grabc_edges = (d_left < d_right) ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT;
+				else
+					grabc_edges = (d_top < d_bottom) ? WLR_EDGE_TOP : WLR_EDGE_BOTTOM;
+			}
 		}
 
 		if (grabc_edges & WLR_EDGE_LEFT)

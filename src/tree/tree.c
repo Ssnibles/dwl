@@ -917,3 +917,151 @@ tree_export_ipc(Workspace *ws)
 	rename(tmp_path, ipc_path);
 }
 
+void
+tree_mouse_resize(Client *grabc, uint32_t grabc_edges, float delta_x, float delta_y)
+{
+	Workspace *ws;
+	const Layout *lt;
+	int dir_h = 0, dir_v = 0;
+	float abs_dx = fabsf(delta_x);
+	float abs_dy = fabsf(delta_y);
+
+	if (!selmon || !grabc || !grabc->node)
+		return;
+
+	ws = grabc->ws ? grabc->ws : selmon->active_workspace;
+	lt = (ws && ws->layout) ? ws->layout : selmon->lt[selmon->sellt];
+
+	if (!lt || lt->arrange == monocle)
+		return;
+
+	if (grabc_edges & WLR_EDGE_RIGHT)
+		dir_h = (delta_x > 0) ? WLR_DIRECTION_RIGHT : WLR_DIRECTION_LEFT;
+	else if (grabc_edges & WLR_EDGE_LEFT)
+		dir_h = (delta_x > 0) ? WLR_DIRECTION_LEFT : WLR_DIRECTION_RIGHT;
+	else if (abs_dx > 0.0001f)
+		dir_h = (delta_x > 0) ? WLR_DIRECTION_RIGHT : WLR_DIRECTION_LEFT;
+
+	if (grabc_edges & WLR_EDGE_BOTTOM)
+		dir_v = (delta_y > 0) ? WLR_DIRECTION_DOWN : WLR_DIRECTION_UP;
+	else if (grabc_edges & WLR_EDGE_TOP)
+		dir_v = (delta_y > 0) ? WLR_DIRECTION_UP : WLR_DIRECTION_DOWN;
+	else if (abs_dy > 0.0001f)
+		dir_v = (delta_y > 0) ? WLR_DIRECTION_DOWN : WLR_DIRECTION_UP;
+
+	if (lt->arrange == tile || lt->arrange == master_stack) {
+		if (abs_dx > 0.0001f && dir_h) {
+			float mfact_change = abs_dx;
+			if (dir_h == WLR_DIRECTION_LEFT)
+				mfact_change = -mfact_change;
+
+			selmon->mfact = MIN(0.9f, MAX(0.1f, selmon->mfact + mfact_change));
+		}
+
+		if (abs_dy > 0.0001f && dir_v) {
+			Client *leaves[128];
+			int n = node_collect_leaves(ws ? ws->root : NULL, leaves, 128);
+			int idx = -1, i;
+			for (i = 0; i < n; i++) {
+				if (leaves[i] == grabc) {
+					idx = i;
+					break;
+				}
+			}
+			if (idx >= 0) {
+				int nm = MIN(n, selmon->nmaster);
+				Node *target_node = grabc->node;
+				Node *prev_node = NULL, *next_node = NULL;
+
+				if (idx < nm) {
+					if (idx > 0 && leaves[idx - 1]->node)
+						prev_node = leaves[idx - 1]->node;
+					if (idx < nm - 1 && leaves[idx + 1]->node)
+						next_node = leaves[idx + 1]->node;
+				} else {
+					if (idx > nm && leaves[idx - 1]->node)
+						prev_node = leaves[idx - 1]->node;
+					if (idx < n - 1 && leaves[idx + 1]->node)
+						next_node = leaves[idx + 1]->node;
+				}
+				adjust_node_ratio(target_node, prev_node, next_node, dir_v, 0, abs_dy);
+			}
+		}
+		arrange(selmon);
+		return;
+	}
+
+	if (lt->arrange == tree_layout || lt->arrange == bsp_layout) {
+		if (abs_dx > 0.0001f && dir_h) {
+			Node *curr, *target_h = NULL;
+			for (curr = grabc->node; curr; curr = curr->parent) {
+				if (curr->parent && curr->parent->split_type == SPLIT_HORIZONTAL) {
+					target_h = curr;
+					break;
+				}
+			}
+			if (!target_h)
+				target_h = grabc->node;
+			if (target_h->parent) {
+				Node *prev_sub = NULL, *next_sub = NULL;
+				if (target_h->link.prev != &target_h->parent->children)
+					prev_sub = wl_container_of(target_h->link.prev, prev_sub, link);
+				if (target_h->link.next != &target_h->parent->children)
+					next_sub = wl_container_of(target_h->link.next, next_sub, link);
+				adjust_node_ratio(target_h, prev_sub, next_sub, dir_h, 1, abs_dx);
+			}
+		}
+
+		if (abs_dy > 0.0001f && dir_v) {
+			Node *curr, *target_v = NULL;
+			for (curr = grabc->node; curr; curr = curr->parent) {
+				if (curr->parent && curr->parent->split_type == SPLIT_VERTICAL) {
+					target_v = curr;
+					break;
+				}
+			}
+			if (!target_v)
+				target_v = grabc->node;
+			if (target_v->parent) {
+				Node *prev_sub = NULL, *next_sub = NULL;
+				if (target_v->link.prev != &target_v->parent->children)
+					prev_sub = wl_container_of(target_v->link.prev, prev_sub, link);
+				if (target_v->link.next != &target_v->parent->children)
+					next_sub = wl_container_of(target_v->link.next, next_sub, link);
+				adjust_node_ratio(target_v, prev_sub, next_sub, dir_v, 0, abs_dy);
+			}
+		}
+		arrange(selmon);
+		return;
+	}
+
+	{
+		Client *leaves[128];
+		int n = node_collect_leaves(ws ? ws->root : NULL, leaves, 128);
+		int idx = -1, i;
+		for (i = 0; i < n; i++) {
+			if (leaves[i] == grabc) {
+				idx = i;
+				break;
+			}
+		}
+
+		if (idx >= 0 && n > 1) {
+			if (abs_dx > 0.0001f && dir_h) {
+				Node *target_node = grabc->node;
+				Node *prev_node = (idx > 0 && leaves[idx - 1]->node) ? leaves[idx - 1]->node : NULL;
+				Node *next_node = (idx < n - 1 && leaves[idx + 1]->node) ? leaves[idx + 1]->node : NULL;
+				adjust_node_ratio(target_node, prev_node, next_node, dir_h, 1, abs_dx);
+			}
+
+			if (abs_dy > 0.0001f && dir_v) {
+				Node *target_node = grabc->node;
+				Node *prev_node = (idx > 0 && leaves[idx - 1]->node) ? leaves[idx - 1]->node : NULL;
+				Node *next_node = (idx < n - 1 && leaves[idx + 1]->node) ? leaves[idx + 1]->node : NULL;
+				adjust_node_ratio(target_node, prev_node, next_node, dir_v, 0, abs_dy);
+			}
+		}
+		arrange(selmon);
+	}
+}
+
