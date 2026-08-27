@@ -37,11 +37,11 @@ static const Rule rules[] = {
 /* layout(s) */
 static const Layout layouts[] = {
 	/* symbol     arrange function */
+  { "[\\]",     dwindle },
 	{ "RT",       tree_layout },
 	{ "[]=",      tile },
 	{ "><>",      NULL },
 	{ "[M]",      monocle },
-	{ "[\\]",     dwindle },
 	{ "(@)",      spiral },
 };
 
