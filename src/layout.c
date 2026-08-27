@@ -82,7 +82,8 @@ arrange(Monitor *m)
 		}
 	}
 
-	motionnotify(0, NULL, 0, 0, 0, 0);
+	if (cursor_mode != CurResize && cursor_mode != CurMove)
+		motionnotify(0, NULL, 0, 0, 0, 0);
 	checkidleinhibitor(NULL);
 }
 

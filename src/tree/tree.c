@@ -279,7 +279,7 @@ static inline float
 node_get_weight(const Node *child, SplitType split)
 {
 	float r = (split == SPLIT_HORIZONTAL) ? child->ratio_h : child->ratio_v;
-	return (r > 0.05f) ? r : 1.0f;
+	return (r > 0.001f) ? r : 0.05f;
 }
 
 Node *
@@ -484,101 +484,73 @@ tree_equalize_active(const Arg *arg)
 }
 
 static void
-adjust_node_ratio(Node *target, Node *prev, Node *next, int dir, int is_horiz, float delta)
+adjust_sibling_ratios(Node *node_first, Node *node_second, int is_horiz, float delta)
 {
-	float min_weight = 0.15f;
+	float min_weight = 0.05f;
 	float act_d;
 
+	if (!node_first || !node_second)
+		return;
+
+	if (is_horiz) {
+		if (delta > 0.0f) {
+			act_d = MIN(delta, MAX(0.0f, node_second->ratio_h - min_weight));
+			node_first->ratio_h += act_d;
+			node_second->ratio_h -= act_d;
+		} else if (delta < 0.0f) {
+			float neg_d = -delta;
+			act_d = MIN(neg_d, MAX(0.0f, node_first->ratio_h - min_weight));
+			node_first->ratio_h -= act_d;
+			node_second->ratio_h += act_d;
+		}
+		node_first->ratio_h = clamp_ratio(node_first->ratio_h);
+		node_second->ratio_h = clamp_ratio(node_second->ratio_h);
+	} else {
+		if (delta > 0.0f) {
+			act_d = MIN(delta, MAX(0.0f, node_second->ratio_v - min_weight));
+			node_first->ratio_v += act_d;
+			node_second->ratio_v -= act_d;
+		} else if (delta < 0.0f) {
+			float neg_d = -delta;
+			act_d = MIN(neg_d, MAX(0.0f, node_first->ratio_v - min_weight));
+			node_first->ratio_v -= act_d;
+			node_second->ratio_v += act_d;
+		}
+		node_first->ratio_v = clamp_ratio(node_first->ratio_v);
+		node_second->ratio_v = clamp_ratio(node_second->ratio_v);
+	}
+}
+
+static void
+adjust_node_ratio(Node *target, Node *prev, Node *next, int dir, int is_horiz, float delta)
+{
 	if (!target)
 		return;
 
 	if (is_horiz) {
-		if (dir == WLR_DIRECTION_LEFT) {
-			if (prev) {
-				float cur_w = prev->ratio_h;
-				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
-				if (act_d > 0.001f) {
-					prev->ratio_h -= act_d;
-					target->ratio_h += act_d;
-				}
-			} else if (next) {
-				float cur_w = target->ratio_h;
-				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
-				if (act_d > 0.001f) {
-					target->ratio_h -= act_d;
-					next->ratio_h += act_d;
-				}
-			} else {
-				target->ratio_h -= delta;
-			}
-		} else if (dir == WLR_DIRECTION_RIGHT) {
-			if (next) {
-				float cur_w = next->ratio_h;
-				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
-				if (act_d > 0.001f) {
-					next->ratio_h -= act_d;
-					target->ratio_h += act_d;
-				}
-			} else if (prev) {
-				float cur_w = target->ratio_h;
-				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
-				if (act_d > 0.001f) {
-					target->ratio_h -= act_d;
-					prev->ratio_h += act_d;
-				}
-			} else {
-				target->ratio_h += delta;
-			}
+		if (dir == WLR_DIRECTION_RIGHT) {
+			if (next)
+				adjust_sibling_ratios(target, next, 1, delta);
+			else if (prev)
+				adjust_sibling_ratios(prev, target, 1, delta);
+		} else if (dir == WLR_DIRECTION_LEFT) {
+			if (prev)
+				adjust_sibling_ratios(prev, target, 1, -delta);
+			else if (next)
+				adjust_sibling_ratios(target, next, 1, -delta);
 		}
 	} else {
-		if (dir == WLR_DIRECTION_UP) {
-			if (prev) {
-				float cur_w = prev->ratio_v;
-				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
-				if (act_d > 0.001f) {
-					prev->ratio_v -= act_d;
-					target->ratio_v += act_d;
-				}
-			} else if (next) {
-				float cur_w = target->ratio_v;
-				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
-				if (act_d > 0.001f) {
-					target->ratio_v -= act_d;
-					next->ratio_v += act_d;
-				}
-			} else {
-				target->ratio_v -= delta;
-			}
-		} else if (dir == WLR_DIRECTION_DOWN) {
-			if (next) {
-				float cur_w = next->ratio_v;
-				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
-				if (act_d > 0.001f) {
-					next->ratio_v -= act_d;
-					target->ratio_v += act_d;
-				}
-			} else if (prev) {
-				float cur_w = target->ratio_v;
-				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
-				if (act_d > 0.001f) {
-					target->ratio_v -= act_d;
-					prev->ratio_v += act_d;
-				}
-			} else {
-				target->ratio_v += delta;
-			}
+		if (dir == WLR_DIRECTION_DOWN) {
+			if (next)
+				adjust_sibling_ratios(target, next, 0, delta);
+			else if (prev)
+				adjust_sibling_ratios(prev, target, 0, delta);
+		} else if (dir == WLR_DIRECTION_UP) {
+			if (prev)
+				adjust_sibling_ratios(prev, target, 0, -delta);
+			else if (next)
+				adjust_sibling_ratios(target, next, 0, -delta);
 		}
-	}
-
-	target->ratio_h = clamp_ratio(target->ratio_h);
-	target->ratio_v = clamp_ratio(target->ratio_v);
-	if (prev) {
-		prev->ratio_h = clamp_ratio(prev->ratio_h);
-		prev->ratio_v = clamp_ratio(prev->ratio_v);
-	}
-	if (next) {
-		next->ratio_h = clamp_ratio(next->ratio_h);
-		next->ratio_v = clamp_ratio(next->ratio_v);
 	}
 }
 
@@ -917,151 +889,353 @@ tree_export_ipc(Workspace *ws)
 	rename(tmp_path, ipc_path);
 }
 
+static Node *
+find_ancestor_split(Node *start, SplitType split, uint32_t grabc_edges)
+{
+	Node *curr;
+	for (curr = start; curr; curr = curr->parent) {
+		Node *parent = curr->parent;
+		if (!parent || parent->split_type != split)
+			continue;
+
+		Node *prev_sub = (curr->link.prev != &parent->children) ? wl_container_of(curr->link.prev, prev_sub, link) : NULL;
+		Node *next_sub = (curr->link.next != &parent->children) ? wl_container_of(curr->link.next, next_sub, link) : NULL;
+
+		if (split == SPLIT_HORIZONTAL) {
+			if ((grabc_edges & WLR_EDGE_LEFT) && prev_sub)
+				return curr;
+			if ((grabc_edges & WLR_EDGE_RIGHT) && next_sub)
+				return curr;
+		} else {
+			if ((grabc_edges & WLR_EDGE_TOP) && prev_sub)
+				return curr;
+			if ((grabc_edges & WLR_EDGE_BOTTOM) && next_sub)
+				return curr;
+		}
+
+		if (prev_sub || next_sub)
+			return curr;
+	}
+	return NULL;
+}
+
+typedef struct {
+	Client *client;
+	uint32_t grabc_edges;
+	double start_x;
+	double start_y;
+
+	/* For tile / master_stack layout */
+	float start_mfact;
+	int is_master;
+
+	/* Horizontal split node pair */
+	Node *node_h_left;
+	Node *node_h_right;
+	float start_ratio_h_left;
+	float start_ratio_h_right;
+	float parent_w;
+
+	/* Vertical split node pair */
+	Node *node_v_top;
+	Node *node_v_bottom;
+	float start_ratio_v_top;
+	float start_ratio_v_bottom;
+	float parent_h;
+} TiledResizeState;
+
+static TiledResizeState resize_state;
+
 void
-tree_mouse_resize(Client *grabc, uint32_t grabc_edges, float delta_x, float delta_y)
+tree_mouse_resize_start(Client *c, uint32_t grabc_edges, double cursor_x, double cursor_y)
 {
 	Workspace *ws;
 	const Layout *lt;
-	int dir_h = 0, dir_v = 0;
-	float abs_dx = fabsf(delta_x);
-	float abs_dy = fabsf(delta_y);
 
-	if (!selmon || !grabc || !grabc->node)
+	memset(&resize_state, 0, sizeof(resize_state));
+	if (!selmon || !c || !c->node)
 		return;
 
-	ws = grabc->ws ? grabc->ws : selmon->active_workspace;
+	ws = c->ws ? c->ws : selmon->active_workspace;
 	lt = (ws && ws->layout) ? ws->layout : selmon->lt[selmon->sellt];
 
 	if (!lt || lt->arrange == monocle)
 		return;
 
-	if (grabc_edges & WLR_EDGE_RIGHT)
-		dir_h = (delta_x > 0) ? WLR_DIRECTION_RIGHT : WLR_DIRECTION_LEFT;
-	else if (grabc_edges & WLR_EDGE_LEFT)
-		dir_h = (delta_x > 0) ? WLR_DIRECTION_LEFT : WLR_DIRECTION_RIGHT;
-	else if (abs_dx > 0.0001f)
-		dir_h = (delta_x > 0) ? WLR_DIRECTION_RIGHT : WLR_DIRECTION_LEFT;
+	resize_state.client = c;
+	resize_state.grabc_edges = grabc_edges;
+	resize_state.start_x = cursor_x;
+	resize_state.start_y = cursor_y;
+	resize_state.start_mfact = selmon->mfact;
 
-	if (grabc_edges & WLR_EDGE_BOTTOM)
-		dir_v = (delta_y > 0) ? WLR_DIRECTION_DOWN : WLR_DIRECTION_UP;
-	else if (grabc_edges & WLR_EDGE_TOP)
-		dir_v = (delta_y > 0) ? WLR_DIRECTION_UP : WLR_DIRECTION_DOWN;
-	else if (abs_dy > 0.0001f)
-		dir_v = (delta_y > 0) ? WLR_DIRECTION_DOWN : WLR_DIRECTION_UP;
+	Client *leaves[128];
+	int n = node_collect_leaves(ws ? ws->root : NULL, leaves, 128);
+	int idx = -1, i;
+	for (i = 0; i < n; i++) {
+		client_set_resizing(leaves[i], 1);
+		if (leaves[i] == c) {
+			idx = i;
+		}
+	}
 
 	if (lt->arrange == tile || lt->arrange == master_stack) {
-		if (abs_dx > 0.0001f && dir_h) {
-			float mfact_change = abs_dx;
-			if (dir_h == WLR_DIRECTION_LEFT)
-				mfact_change = -mfact_change;
+		int nm = MIN(n, selmon->nmaster);
+		resize_state.is_master = (idx >= 0 && idx < nm);
 
-			selmon->mfact = MIN(0.9f, MAX(0.1f, selmon->mfact + mfact_change));
+		if (idx >= 0 && n > 1) {
+			Node *prev_node = NULL, *next_node = NULL;
+			if (resize_state.is_master) {
+				if (idx > 0 && leaves[idx - 1]->node)
+					prev_node = leaves[idx - 1]->node;
+				if (idx < nm - 1 && leaves[idx + 1]->node)
+					next_node = leaves[idx + 1]->node;
+			} else {
+				if (idx > nm && leaves[idx - 1]->node)
+					prev_node = leaves[idx - 1]->node;
+				if (idx < n - 1 && leaves[idx + 1]->node)
+					next_node = leaves[idx + 1]->node;
+			}
+
+			if ((grabc_edges & WLR_EDGE_TOP) && prev_node) {
+				resize_state.node_v_top = prev_node;
+				resize_state.node_v_bottom = c->node;
+			} else if ((grabc_edges & WLR_EDGE_BOTTOM) && next_node) {
+				resize_state.node_v_top = c->node;
+				resize_state.node_v_bottom = next_node;
+			} else if (prev_node) {
+				resize_state.node_v_top = prev_node;
+				resize_state.node_v_bottom = c->node;
+			} else if (next_node) {
+				resize_state.node_v_top = c->node;
+				resize_state.node_v_bottom = next_node;
+			}
+
+			if (resize_state.node_v_top && resize_state.node_v_bottom) {
+				resize_state.start_ratio_v_top = resize_state.node_v_top->ratio_v;
+				resize_state.start_ratio_v_bottom = resize_state.node_v_bottom->ratio_v;
+				resize_state.parent_h = (selmon->w.height > 0) ? (float)selmon->w.height : 1080.0f;
+			}
+		}
+		return;
+	}
+
+	if (lt->arrange == tree_layout || lt->arrange == bsp_layout) {
+		Node *target_h = find_ancestor_split(c->node, SPLIT_HORIZONTAL, grabc_edges);
+		if (target_h && target_h->parent) {
+			Node *parent = target_h->parent;
+			Node *prev_sub = (target_h->link.prev != &parent->children) ? wl_container_of(target_h->link.prev, prev_sub, link) : NULL;
+			Node *next_sub = (target_h->link.next != &parent->children) ? wl_container_of(target_h->link.next, next_sub, link) : NULL;
+
+			if ((grabc_edges & WLR_EDGE_LEFT) && prev_sub) {
+				resize_state.node_h_left = prev_sub;
+				resize_state.node_h_right = target_h;
+			} else if ((grabc_edges & WLR_EDGE_RIGHT) && next_sub) {
+				resize_state.node_h_left = target_h;
+				resize_state.node_h_right = next_sub;
+			} else if (prev_sub) {
+				resize_state.node_h_left = prev_sub;
+				resize_state.node_h_right = target_h;
+			} else if (next_sub) {
+				resize_state.node_h_left = target_h;
+				resize_state.node_h_right = next_sub;
+			}
+
+			if (resize_state.node_h_left && resize_state.node_h_right) {
+				resize_state.start_ratio_h_left = resize_state.node_h_left->ratio_h;
+				resize_state.start_ratio_h_right = resize_state.node_h_right->ratio_h;
+				resize_state.parent_w = (parent->geom.width > 0) ? (float)parent->geom.width : (selmon->w.width > 0 ? (float)selmon->w.width : 1920.0f);
+			}
 		}
 
-		if (abs_dy > 0.0001f && dir_v) {
-			Client *leaves[128];
-			int n = node_collect_leaves(ws ? ws->root : NULL, leaves, 128);
-			int idx = -1, i;
-			for (i = 0; i < n; i++) {
-				if (leaves[i] == grabc) {
-					idx = i;
-					break;
-				}
-			}
-			if (idx >= 0) {
-				int nm = MIN(n, selmon->nmaster);
-				Node *target_node = grabc->node;
-				Node *prev_node = NULL, *next_node = NULL;
+		Node *target_v = find_ancestor_split(c->node, SPLIT_VERTICAL, grabc_edges);
+		if (target_v && target_v->parent) {
+			Node *parent = target_v->parent;
+			Node *prev_sub = (target_v->link.prev != &parent->children) ? wl_container_of(target_v->link.prev, prev_sub, link) : NULL;
+			Node *next_sub = (target_v->link.next != &parent->children) ? wl_container_of(target_v->link.next, next_sub, link) : NULL;
 
-				if (idx < nm) {
-					if (idx > 0 && leaves[idx - 1]->node)
-						prev_node = leaves[idx - 1]->node;
-					if (idx < nm - 1 && leaves[idx + 1]->node)
-						next_node = leaves[idx + 1]->node;
-				} else {
-					if (idx > nm && leaves[idx - 1]->node)
-						prev_node = leaves[idx - 1]->node;
-					if (idx < n - 1 && leaves[idx + 1]->node)
-						next_node = leaves[idx + 1]->node;
-				}
-				adjust_node_ratio(target_node, prev_node, next_node, dir_v, 0, abs_dy);
+			if ((grabc_edges & WLR_EDGE_TOP) && prev_sub) {
+				resize_state.node_v_top = prev_sub;
+				resize_state.node_v_bottom = target_v;
+			} else if ((grabc_edges & WLR_EDGE_BOTTOM) && next_sub) {
+				resize_state.node_v_top = target_v;
+				resize_state.node_v_bottom = next_sub;
+			} else if (prev_sub) {
+				resize_state.node_v_top = prev_sub;
+				resize_state.node_v_bottom = target_v;
+			} else if (next_sub) {
+				resize_state.node_v_top = target_v;
+				resize_state.node_v_bottom = next_sub;
 			}
+
+			if (resize_state.node_v_top && resize_state.node_v_bottom) {
+				resize_state.start_ratio_v_top = resize_state.node_v_top->ratio_v;
+				resize_state.start_ratio_v_bottom = resize_state.node_v_bottom->ratio_v;
+				resize_state.parent_h = (parent->geom.height > 0) ? (float)parent->geom.height : (selmon->w.height > 0 ? (float)selmon->w.height : 1080.0f);
+			}
+		}
+		return;
+	}
+
+	/* Fallback for columns, dwindle, etc. */
+	if (idx >= 0 && n > 1) {
+		Node *prev_node = (idx > 0 && leaves[idx - 1]->node) ? leaves[idx - 1]->node : NULL;
+		Node *next_node = (idx < n - 1 && leaves[idx + 1]->node) ? leaves[idx + 1]->node : NULL;
+
+		if ((grabc_edges & WLR_EDGE_LEFT) && prev_node) {
+			resize_state.node_h_left = prev_node;
+			resize_state.node_h_right = c->node;
+		} else if ((grabc_edges & WLR_EDGE_RIGHT) && next_node) {
+			resize_state.node_h_left = c->node;
+			resize_state.node_h_right = next_node;
+		} else if (prev_node) {
+			resize_state.node_h_left = prev_node;
+			resize_state.node_h_right = c->node;
+		} else if (next_node) {
+			resize_state.node_h_left = c->node;
+			resize_state.node_h_right = next_node;
+		}
+
+		if (resize_state.node_h_left && resize_state.node_h_right) {
+			resize_state.start_ratio_h_left = resize_state.node_h_left->ratio_h;
+			resize_state.start_ratio_h_right = resize_state.node_h_right->ratio_h;
+			resize_state.parent_w = (selmon->w.width > 0) ? (float)selmon->w.width : 1920.0f;
+		}
+
+		if ((grabc_edges & WLR_EDGE_TOP) && prev_node) {
+			resize_state.node_v_top = prev_node;
+			resize_state.node_v_bottom = c->node;
+		} else if ((grabc_edges & WLR_EDGE_BOTTOM) && next_node) {
+			resize_state.node_v_top = c->node;
+			resize_state.node_v_bottom = next_node;
+		} else if (prev_node) {
+			resize_state.node_v_top = prev_node;
+			resize_state.node_v_bottom = c->node;
+		} else if (next_node) {
+			resize_state.node_v_top = c->node;
+			resize_state.node_v_bottom = next_node;
+		}
+
+		if (resize_state.node_v_top && resize_state.node_v_bottom) {
+			resize_state.start_ratio_v_top = resize_state.node_v_top->ratio_v;
+			resize_state.start_ratio_v_bottom = resize_state.node_v_bottom->ratio_v;
+			resize_state.parent_h = (selmon->w.height > 0) ? (float)selmon->w.height : 1080.0f;
+		}
+	}
+}
+
+static void
+apply_abs_sibling_ratios(Node *node_first, Node *node_second, int is_horiz,
+		float start_r1, float start_r2, float delta)
+{
+	float min_weight = 0.05f;
+	float sum = start_r1 + start_r2;
+	float r1 = start_r1 + delta;
+	float r2 = start_r2 - delta;
+
+	if (r1 < min_weight) {
+		r1 = min_weight;
+		r2 = sum - min_weight;
+	} else if (r2 < min_weight) {
+		r2 = min_weight;
+		r1 = sum - min_weight;
+	}
+
+	if (is_horiz) {
+		node_first->ratio_h = clamp_ratio(r1);
+		node_second->ratio_h = clamp_ratio(r2);
+	} else {
+		node_first->ratio_v = clamp_ratio(r1);
+		node_second->ratio_v = clamp_ratio(r2);
+	}
+}
+
+void
+tree_mouse_resize(Client *c, double cursor_x, double cursor_y)
+{
+	Workspace *ws;
+	const Layout *lt;
+	float total_dx, total_dy;
+
+	if (!selmon || !c || !c->node || c != resize_state.client)
+		return;
+
+	ws = c->ws ? c->ws : selmon->active_workspace;
+	lt = (ws && ws->layout) ? ws->layout : selmon->lt[selmon->sellt];
+
+	if (!lt || lt->arrange == monocle)
+		return;
+
+	total_dx = (float)(cursor_x - resize_state.start_x);
+	total_dy = (float)(cursor_y - resize_state.start_y);
+
+	if (lt->arrange == tile || lt->arrange == master_stack) {
+		float mon_w = (selmon->w.width > 0) ? (float)selmon->w.width : 1920.0f;
+		float avail_w = MAX(1.0f, mon_w - (float)gappx);
+
+		/* Check if dragging master/stack divider */
+		if (resize_state.is_master && (resize_state.grabc_edges & WLR_EDGE_RIGHT)) {
+			selmon->mfact = MIN(0.9f, MAX(0.1f, resize_state.start_mfact + total_dx / avail_w));
+		} else if (!resize_state.is_master && (resize_state.grabc_edges & WLR_EDGE_LEFT)) {
+			selmon->mfact = MIN(0.9f, MAX(0.1f, resize_state.start_mfact + total_dx / avail_w));
+		}
+
+		if (resize_state.node_v_top && resize_state.node_v_bottom && resize_state.parent_h > 0.0f) {
+			float delta_r = total_dy / resize_state.parent_h;
+			apply_abs_sibling_ratios(resize_state.node_v_top, resize_state.node_v_bottom, 0,
+					resize_state.start_ratio_v_top, resize_state.start_ratio_v_bottom, delta_r);
 		}
 		arrange(selmon);
 		return;
 	}
 
 	if (lt->arrange == tree_layout || lt->arrange == bsp_layout) {
-		if (abs_dx > 0.0001f && dir_h) {
-			Node *curr, *target_h = NULL;
-			for (curr = grabc->node; curr; curr = curr->parent) {
-				if (curr->parent && curr->parent->split_type == SPLIT_HORIZONTAL) {
-					target_h = curr;
-					break;
-				}
-			}
-			if (!target_h)
-				target_h = grabc->node;
-			if (target_h->parent) {
-				Node *prev_sub = NULL, *next_sub = NULL;
-				if (target_h->link.prev != &target_h->parent->children)
-					prev_sub = wl_container_of(target_h->link.prev, prev_sub, link);
-				if (target_h->link.next != &target_h->parent->children)
-					next_sub = wl_container_of(target_h->link.next, next_sub, link);
-				adjust_node_ratio(target_h, prev_sub, next_sub, dir_h, 1, abs_dx);
-			}
+		if (resize_state.node_h_left && resize_state.node_h_right && resize_state.parent_w > 0.0f) {
+			float delta_r = total_dx / resize_state.parent_w;
+			apply_abs_sibling_ratios(resize_state.node_h_left, resize_state.node_h_right, 1,
+					resize_state.start_ratio_h_left, resize_state.start_ratio_h_right, delta_r);
 		}
 
-		if (abs_dy > 0.0001f && dir_v) {
-			Node *curr, *target_v = NULL;
-			for (curr = grabc->node; curr; curr = curr->parent) {
-				if (curr->parent && curr->parent->split_type == SPLIT_VERTICAL) {
-					target_v = curr;
-					break;
-				}
-			}
-			if (!target_v)
-				target_v = grabc->node;
-			if (target_v->parent) {
-				Node *prev_sub = NULL, *next_sub = NULL;
-				if (target_v->link.prev != &target_v->parent->children)
-					prev_sub = wl_container_of(target_v->link.prev, prev_sub, link);
-				if (target_v->link.next != &target_v->parent->children)
-					next_sub = wl_container_of(target_v->link.next, next_sub, link);
-				adjust_node_ratio(target_v, prev_sub, next_sub, dir_v, 0, abs_dy);
-			}
+		if (resize_state.node_v_top && resize_state.node_v_bottom && resize_state.parent_h > 0.0f) {
+			float delta_r = total_dy / resize_state.parent_h;
+			apply_abs_sibling_ratios(resize_state.node_v_top, resize_state.node_v_bottom, 0,
+					resize_state.start_ratio_v_top, resize_state.start_ratio_v_bottom, delta_r);
 		}
 		arrange(selmon);
 		return;
 	}
 
-	{
-		Client *leaves[128];
-		int n = node_collect_leaves(ws ? ws->root : NULL, leaves, 128);
-		int idx = -1, i;
-		for (i = 0; i < n; i++) {
-			if (leaves[i] == grabc) {
-				idx = i;
-				break;
-			}
-		}
-
-		if (idx >= 0 && n > 1) {
-			if (abs_dx > 0.0001f && dir_h) {
-				Node *target_node = grabc->node;
-				Node *prev_node = (idx > 0 && leaves[idx - 1]->node) ? leaves[idx - 1]->node : NULL;
-				Node *next_node = (idx < n - 1 && leaves[idx + 1]->node) ? leaves[idx + 1]->node : NULL;
-				adjust_node_ratio(target_node, prev_node, next_node, dir_h, 1, abs_dx);
-			}
-
-			if (abs_dy > 0.0001f && dir_v) {
-				Node *target_node = grabc->node;
-				Node *prev_node = (idx > 0 && leaves[idx - 1]->node) ? leaves[idx - 1]->node : NULL;
-				Node *next_node = (idx < n - 1 && leaves[idx + 1]->node) ? leaves[idx + 1]->node : NULL;
-				adjust_node_ratio(target_node, prev_node, next_node, dir_v, 0, abs_dy);
-			}
-		}
-		arrange(selmon);
+	/* Columns, Dwindle, Spiral, etc. */
+	if (resize_state.node_h_left && resize_state.node_h_right && resize_state.parent_w > 0.0f) {
+		float delta_r = total_dx / resize_state.parent_w;
+		apply_abs_sibling_ratios(resize_state.node_h_left, resize_state.node_h_right, 1,
+				resize_state.start_ratio_h_left, resize_state.start_ratio_h_right, delta_r);
 	}
+
+	if (resize_state.node_v_top && resize_state.node_v_bottom && resize_state.parent_h > 0.0f) {
+		float delta_r = total_dy / resize_state.parent_h;
+		apply_abs_sibling_ratios(resize_state.node_v_top, resize_state.node_v_bottom, 0,
+				resize_state.start_ratio_v_top, resize_state.start_ratio_v_bottom, delta_r);
+	}
+
+	arrange(selmon);
+}
+
+void
+tree_mouse_resize_end(void)
+{
+	if (!resize_state.client)
+		return;
+	Workspace *ws = resize_state.client->ws ? resize_state.client->ws : (selmon ? selmon->active_workspace : NULL);
+	if (ws && ws->root) {
+		Client *leaves[128];
+		int n = node_collect_leaves(ws->root, leaves, 128);
+		int i;
+		for (i = 0; i < n; i++) {
+			client_set_resizing(leaves[i], 0);
+		}
+	}
+	memset(&resize_state, 0, sizeof(resize_state));
+	if (selmon)
+		arrange(selmon);
 }
 

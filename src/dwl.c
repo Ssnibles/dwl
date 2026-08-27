@@ -707,9 +707,15 @@ resize(Client *c, struct wlr_box geo, int interact)
 
 	bbox = interact ? &sgeom : &c->mon->w;
 
-	client_set_bounds(c, MAX(1, geo.width - 2 * (int)c->bw), MAX(1, geo.height - 2 * (int)c->bw));
+	struct wlr_box old_geom = c->geom;
 	c->geom = geo;
 	applybounds(c, bbox);
+
+	if (c->geom.x == old_geom.x && c->geom.y == old_geom.y &&
+			c->geom.width == old_geom.width && c->geom.height == old_geom.height)
+		return;
+
+	client_set_bounds(c, MAX(1, c->geom.width - 2 * (int)c->bw), MAX(1, c->geom.height - 2 * (int)c->bw));
 
 	client_get_clip(c, &clip);
 
@@ -731,8 +737,20 @@ resize(Client *c, struct wlr_box geo, int interact)
 	wlr_scene_node_for_each_buffer(&c->scene_surface->node, setcorner_radius_cb, &inner_radius);
 
 	/* this is a no-op if size hasn't changed */
-	c->resize = client_set_size(c, MAX(1, c->geom.width - 2 * (int)c->bw),
-			MAX(1, c->geom.height - 2 * (int)c->bw));
+	if (cursor_mode == CurResize && !c->isfloating) {
+		struct timespec now;
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		int64_t ms_diff = (now.tv_sec - c->last_resize_time.tv_sec) * 1000 +
+				(now.tv_nsec - c->last_resize_time.tv_nsec) / 1000000;
+		if (ms_diff >= 8) {
+			c->resize = client_set_size(c, MAX(1, c->geom.width - 2 * (int)c->bw),
+					MAX(1, c->geom.height - 2 * (int)c->bw));
+			c->last_resize_time = now;
+		}
+	} else {
+		c->resize = client_set_size(c, MAX(1, c->geom.width - 2 * (int)c->bw),
+				MAX(1, c->geom.height - 2 * (int)c->bw));
+	}
 	wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
 }
 

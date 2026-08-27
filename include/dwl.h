@@ -152,6 +152,7 @@ struct Client {
 	int prev_workspace;
 	Workspace *ws;
 	Node *node;
+	struct timespec last_resize_time;
 };
 
 typedef struct {

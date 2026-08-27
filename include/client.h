@@ -355,8 +355,8 @@ client_set_size(Client *c, uint32_t width, uint32_t height)
 	{
 		int32_t w = MAX(1, (int32_t)width);
 		int32_t h = MAX(1, (int32_t)height);
-		if (w == c->surface.xdg->toplevel->current.width
-				&& h == c->surface.xdg->toplevel->current.height)
+		if (w == c->surface.xdg->toplevel->scheduled.width
+				&& h == c->surface.xdg->toplevel->scheduled.height)
 			return 0;
 		return wlr_xdg_toplevel_set_size(c->surface.xdg->toplevel, w, h);
 	}
@@ -394,6 +394,20 @@ client_set_suspended(Client *c, int suspended)
 #endif
 
 	wlr_xdg_toplevel_set_suspended(c->surface.xdg->toplevel, suspended);
+}
+
+static inline void
+client_set_resizing(Client *c, int resizing)
+{
+	if (!c)
+		return;
+#ifdef XWAYLAND
+	if (client_is_x11(c))
+		return;
+#endif
+	if (!c->surface.xdg || !c->surface.xdg->toplevel)
+		return;
+	wlr_xdg_toplevel_set_resizing(c->surface.xdg->toplevel, resizing);
 }
 
 static inline int

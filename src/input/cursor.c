@@ -172,7 +172,6 @@ buttonpress(struct wl_listener *listener, void *data)
 		/* If you released any buttons, we exit interactive move/resize mode. */
 		/* TODO: should reset to the pointer focus's current setcursor */
 		if (!locked && cursor_mode != CurNormal && cursor_mode != CurPressed) {
-			int was_resize = (cursor_mode == CurResize);
 			int was_move = (cursor_mode == CurMove);
 			wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
 			cursor_mode = CurNormal;
@@ -244,6 +243,8 @@ buttonpress(struct wl_listener *listener, void *data)
 			in_pointer_focus = 0;
 			return;
 		}
+		if (cursor_mode == CurResize)
+			tree_mouse_resize_end();
 		cursor_mode = CurNormal;
 		if (selmon && selmon->active_workspace)
 			tree_export_ipc(selmon->active_workspace);
@@ -536,9 +537,7 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 
 			resize(grabc, (struct wlr_box){.x = new_x, .y = new_y, .width = new_w, .height = new_h}, 1);
 		} else if (grabc->node) {
-			float delta_x = (float)dx / (float)(selmon && selmon->w.width > 0 ? selmon->w.width : 1920);
-			float delta_y = (float)dy / (float)(selmon && selmon->w.height > 0 ? selmon->w.height : 1080);
-			tree_mouse_resize(grabc, grabc_edges, delta_x, delta_y);
+			tree_mouse_resize(grabc, cursor->x, cursor->y);
 		}
 
 		in_pointer_focus = 0;
@@ -677,6 +676,8 @@ moveresize(const Arg *arg)
 		}
 
 		wlr_cursor_set_xcursor(cursor, cursor_mgr, cursor_icon);
+		if (!grabc->isfloating && grabc->node)
+			tree_mouse_resize_start(grabc, grabc_edges, cursor->x, cursor->y);
 		break;
 	}
 }
