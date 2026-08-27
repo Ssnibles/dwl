@@ -190,16 +190,12 @@ togglescratchpad_client(const Arg *arg)
 	c = focustop(selmon);
 
 	if (c && c->ws && c->ws->id != SCRATCHPAD_WORKSPACE) {
-		/* Case A: Window is on a standard workspace -> Save origin & move to SCRATCHPAD_WORKSPACE */
+		/* Case A: Window is on a standard workspace -> Save origin & move to SCRATCHPAD_WORKSPACE silently */
 		c->prev_workspace = c->ws->id;
 		c->wasfloating = c->isfloating;
 		if (c->isfullscreen)
 			setfullscreen(c, 0);
-		selmon->scratchpad_showing = 1;
 		client_move_to_workspace(c, scratch_ws);
-		arrange(selmon);
-		focusclient(c, 1);
-		motionnotify(0, NULL, 0, 0, 0, 0);
 		return;
 	}
 

@@ -11,7 +11,7 @@ void arrange_workspace(Monitor *m, Workspace *ws, struct wlr_box box, const Layo
 void tree_layout(Monitor *m);
 void bsp_layout(Monitor *m);
 void dwindle(Monitor *m);
-void fibonacci(Monitor *m, int s);
+void fibonacci(Monitor *m);
 void master_stack(Monitor *m);
 void columns(Monitor *m);
 void tile(Monitor *m);

@@ -18,11 +18,13 @@ client_is_x11(Client *c)
 static inline struct wlr_surface *
 client_surface(Client *c)
 {
+	if (!c)
+		return NULL;
 #ifdef XWAYLAND
 	if (client_is_x11(c))
-		return c->surface.xwayland->surface;
+		return c->surface.xwayland ? c->surface.xwayland->surface : NULL;
 #endif
-	return c->surface.xdg->surface;
+	return c->surface.xdg ? c->surface.xdg->surface : NULL;
 }
 
 static inline int
@@ -338,29 +340,43 @@ client_set_scale(struct wlr_surface *s, float scale)
 static inline uint32_t
 client_set_size(Client *c, uint32_t width, uint32_t height)
 {
+	if (!c)
+		return 0;
 #ifdef XWAYLAND
 	if (client_is_x11(c)) {
-		wlr_xwayland_surface_configure(c->surface.xwayland,
-				c->geom.x + c->bw, c->geom.y + c->bw, width, height);
+		if (c->surface.xwayland)
+			wlr_xwayland_surface_configure(c->surface.xwayland,
+					c->geom.x + c->bw, c->geom.y + c->bw, width, height);
 		return 0;
 	}
 #endif
-	if ((int32_t)width == c->surface.xdg->toplevel->current.width
-			&& (int32_t)height == c->surface.xdg->toplevel->current.height)
+	if (!c->surface.xdg || !c->surface.xdg->toplevel)
 		return 0;
-	return wlr_xdg_toplevel_set_size(c->surface.xdg->toplevel, (int32_t)width, (int32_t)height);
+	{
+		int32_t w = MAX(1, (int32_t)width);
+		int32_t h = MAX(1, (int32_t)height);
+		if (w == c->surface.xdg->toplevel->current.width
+				&& h == c->surface.xdg->toplevel->current.height)
+			return 0;
+		return wlr_xdg_toplevel_set_size(c->surface.xdg->toplevel, w, h);
+	}
 }
 
 static inline void
 client_set_tiled(Client *c, uint32_t edges)
 {
+	if (!c)
+		return;
 #ifdef XWAYLAND
 	if (client_is_x11(c)) {
-		wlr_xwayland_surface_set_maximized(c->surface.xwayland,
-				edges != WLR_EDGE_NONE, edges != WLR_EDGE_NONE);
+		if (c->surface.xwayland)
+			wlr_xwayland_surface_set_maximized(c->surface.xwayland,
+					edges != WLR_EDGE_NONE, edges != WLR_EDGE_NONE);
 		return;
-  }
+	}
 #endif
+	if (!c->surface.xdg || !c->surface.xdg->toplevel)
+		return;
 	if (wl_resource_get_version(c->surface.xdg->toplevel->resource)
 			>= XDG_TOPLEVEL_STATE_TILED_RIGHT_SINCE_VERSION) {
 		wlr_xdg_toplevel_set_tiled(c->surface.xdg->toplevel, edges);

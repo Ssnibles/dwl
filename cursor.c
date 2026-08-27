@@ -240,9 +240,10 @@ buttonpress(struct wl_listener *listener, void *data)
 					int old_h = grabc_start_geom.height;
 					int new_w = grabc->geom.width;
 					int new_h = grabc->geom.height;
-
 					float scale_w = (old_w > 0) ? (float)new_w / (float)old_w : 1.0f;
 					float scale_h = (old_h > 0) ? (float)new_h / (float)old_h : 1.0f;
+					Workspace *ws = grabc->ws ? grabc->ws : (selmon ? selmon->active_workspace : NULL);
+					const Layout *lt = (ws && ws->layout) ? ws->layout : (selmon ? selmon->lt[selmon->sellt] : NULL);
 
 					if (fabsf(scale_w - 1.0f) > 0.01f && scale_w > 0.05f && scale_w < 20.0f)
 						grabc->node->ratio_h = clamp_ratio(grabc->node->ratio_h * scale_w);
@@ -250,22 +251,21 @@ buttonpress(struct wl_listener *listener, void *data)
 					if (fabsf(scale_h - 1.0f) > 0.01f && scale_h > 0.05f && scale_h < 20.0f)
 						grabc->node->ratio_v = clamp_ratio(grabc->node->ratio_v * scale_h);
 
-					Workspace *ws = grabc->ws ? grabc->ws : (selmon ? selmon->active_workspace : NULL);
-					const Layout *lt = (ws && ws->layout) ? ws->layout : (selmon ? selmon->lt[selmon->sellt] : NULL);
-
 					if (selmon && lt && (lt->arrange == tile || lt->arrange == master_stack)) {
 						if (fabsf(scale_w - 1.0f) > 0.01f && selmon->w.width > 0) {
 							Client *leaves[128];
 							int n = node_collect_leaves(ws ? ws->root : NULL, leaves, 128);
 							int nm = MIN(n, selmon->nmaster);
 							int is_master = 0;
-							for (int i = 0; i < nm; i++) {
+							int i;
+							float delta_mfact;
+							for (i = 0; i < nm; i++) {
 								if (leaves[i] == grabc) {
 									is_master = 1;
 									break;
 								}
 							}
-							float delta_mfact = (float)(new_w - old_w) / (float)selmon->w.width;
+							delta_mfact = (float)(new_w - old_w) / (float)selmon->w.width;
 							if (is_master)
 								selmon->mfact = MIN(0.9f, MAX(0.1f, selmon->mfact + delta_mfact));
 							else
@@ -432,29 +432,30 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 
 	/* If we are currently grabbing the mouse, handle and return */
 	if (cursor_mode == CurMove) {
+		Client *tc, *at = NULL;
+		double min_dist = 1e9;
+
 		/* Move the grabbed client to the new position. */
 		resize(grabc, (struct wlr_box){.x = (int)round(cursor->x) - grabcx, .y = (int)round(cursor->y) - grabcy,
 			.width = grabc->geom.width, .height = grabc->geom.height}, 1);
 
 		/* Find nearest tileable client target for snapping feedback */
-		Client *tc, *at = NULL;
-		double min_dist = 1e9;
 
 		wl_list_for_each(tc, &clients, link) {
-			double dx = 0, dy = 0, dist;
+			double tdx = 0, tdy = 0, dist;
 			if (!client_is_tileable(tc) || tc == grabc || tc->mon != selmon || tc->ws != grabc->ws)
 				continue;
 			if (cursor->x < tc->geom.x)
-				dx = tc->geom.x - cursor->x;
+				tdx = tc->geom.x - cursor->x;
 			else if (cursor->x > tc->geom.x + tc->geom.width)
-				dx = cursor->x - (tc->geom.x + tc->geom.width);
+				tdx = cursor->x - (tc->geom.x + tc->geom.width);
 
 			if (cursor->y < tc->geom.y)
-				dy = tc->geom.y - cursor->y;
+				tdy = tc->geom.y - cursor->y;
 			else if (cursor->y > tc->geom.y + tc->geom.height)
-				dy = cursor->y - (tc->geom.y + tc->geom.height);
+				tdy = cursor->y - (tc->geom.y + tc->geom.height);
 
-			dist = dx * dx + dy * dy;
+			dist = tdx * tdx + tdy * tdy;
 			if (dist < min_dist) {
 				min_dist = dist;
 				at = tc;

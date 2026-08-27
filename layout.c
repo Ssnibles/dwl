@@ -22,7 +22,7 @@ arrange(Monitor *m)
 
 	wl_list_for_each(c, &clients, link) {
 		if (c->mon == m) {
-			int visible = m->isoverview || VISIBLEON(c, m);
+			int visible = m->isoverview ? (!c->ws || c->ws->id != SCRATCHPAD_WORKSPACE) : VISIBLEON(c, m);
 			wlr_scene_node_set_enabled(&c->scene->node, visible);
 			client_set_suspended(c, !visible);
 		}
@@ -47,7 +47,7 @@ arrange(Monitor *m)
 				on_top ? layers[LyrFloat] : layers[LyrTile]);
 	}
 
-	if (m->scratchpad_showing) {
+	if (m->scratchpad_showing && !m->isoverview) {
 		wl_list_for_each(c, &clients, link) {
 			if (c->mon == m && c->ws && c->ws->id == SCRATCHPAD_WORKSPACE)
 				wlr_scene_node_raise_to_top(&c->scene->node);
@@ -57,8 +57,9 @@ arrange(Monitor *m)
 	if (m->isoverview) {
 		overview(m);
 	} else {
+		const Layout *lt;
 		if (m->active_workspace) {
-			const Layout *lt = m->active_workspace->layout ? m->active_workspace->layout : m->lt[m->sellt];
+			lt = m->active_workspace->layout ? m->active_workspace->layout : m->lt[m->sellt];
 			arrange_workspace(m, m->active_workspace, m->w, lt);
 		}
 
@@ -73,7 +74,7 @@ arrange(Monitor *m)
 					overlay_box.width -= 2 * margin;
 					overlay_box.height -= 2 * margin;
 				}
-				const Layout *lt = scratch_ws->layout ? scratch_ws->layout : m->lt[m->sellt];
+				lt = scratch_ws->layout ? scratch_ws->layout : m->lt[m->sellt];
 				arrange_workspace(m, scratch_ws, overlay_box, lt);
 			}
 		}
@@ -96,23 +97,16 @@ client_get_ratio(const Client *c, int is_horiz)
 {
 	float r;
 	if (!c || !c->node)
-		return 1.0f;
+		return 0.5f;
 	r = is_horiz ? c->node->ratio_h : c->node->ratio_v;
-	return (r > 0.05f) ? r : 1.0f;
+	return clamp_ratio(r);
 }
 
 static float
 calculate_ratio_factor(Client **leaves, int count, int is_horiz)
 {
-	float r1, r2 = 0.0f;
-	int i;
-
-	r1 = client_get_ratio(leaves[0], is_horiz);
-	for (i = 1; i < count; i++)
-		r2 += client_get_ratio(leaves[i], is_horiz);
-	r2 /= (float)(count - 1);
-
-	return r1 / (r1 + r2);
+	(void)count;
+	return client_get_ratio(leaves[0], is_horiz);
 }
 
 static void
@@ -147,37 +141,53 @@ fibonacci_recursive(Client **leaves, int count, struct wlr_box box, int depth, i
 	switch (mode) {
 	case 0: /* Horizontal split, right box receives remainder */
 		{
+			int min_w = (int)min_width + 2 * g;
 			int w = (int)roundf((float)box.width * ratio_factor);
-			w = MAX(1, MIN(box.width - 1, w));
+			if (box.width >= 2 * min_w)
+				w = MAX(min_w, MIN(box.width - min_w, w));
+			else
+				w = MAX(1, MIN(box.width - 1, w));
 			b1.width = w;
 			b2.x = box.x + w;
-			b2.width = box.width - w;
+			b2.width = MAX(1, box.width - w);
 		}
 		break;
 	case 1: /* Vertical split, bottom box receives remainder */
 		{
+			int min_h = (int)min_height + 2 * g;
 			int h = (int)roundf((float)box.height * ratio_factor);
-			h = MAX(1, MIN(box.height - 1, h));
+			if (box.height >= 2 * min_h)
+				h = MAX(min_h, MIN(box.height - min_h, h));
+			else
+				h = MAX(1, MIN(box.height - 1, h));
 			b1.height = h;
 			b2.y = box.y + h;
-			b2.height = box.height - h;
+			b2.height = MAX(1, box.height - h);
 		}
 		break;
 	case 2: /* Horizontal split, left box receives remainder */
 		{
+			int min_w = (int)min_width + 2 * g;
 			int w = (int)roundf((float)box.width * (1.0f - ratio_factor));
-			w = MAX(1, MIN(box.width - 1, w));
+			if (box.width >= 2 * min_w)
+				w = MAX(min_w, MIN(box.width - min_w, w));
+			else
+				w = MAX(1, MIN(box.width - 1, w));
 			b1.x = box.x + w;
-			b1.width = box.width - w;
+			b1.width = MAX(1, box.width - w);
 			b2.width = w;
 		}
 		break;
 	case 3: /* Vertical split, top box receives remainder */
 		{
+			int min_h = (int)min_height + 2 * g;
 			int h = (int)roundf((float)box.height * (1.0f - ratio_factor));
-			h = MAX(1, MIN(box.height - 1, h));
+			if (box.height >= 2 * min_h)
+				h = MAX(min_h, MIN(box.height - min_h, h));
+			else
+				h = MAX(1, MIN(box.height - 1, h));
 			b1.y = box.y + h;
-			b1.height = box.height - h;
+			b1.height = MAX(1, box.height - h);
 			b2.height = h;
 		}
 		break;
@@ -198,8 +208,9 @@ static void
 dwindle_box(Monitor *m, Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
+	int n;
 	(void)m;
-	int n = get_workspace_leaves(ws, leaves, 128);
+	n = get_workspace_leaves(ws, leaves, 128);
 	if (n > 0)
 		fibonacci_recursive(leaves, n, box, 0, 1);
 }
@@ -208,8 +219,9 @@ static void
 spiral_box(Monitor *m, Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
+	int n;
 	(void)m;
-	int n = get_workspace_leaves(ws, leaves, 128);
+	n = get_workspace_leaves(ws, leaves, 128);
 	if (n > 0)
 		fibonacci_recursive(leaves, n, box, 0, 0);
 }
@@ -411,9 +423,8 @@ dwindle(Monitor *m)
 }
 
 void
-fibonacci(Monitor *m, int s)
+fibonacci(Monitor *m)
 {
-	(void)s;
 	spiral(m);
 }
 
@@ -510,7 +521,7 @@ overview(Monitor *m)
 	int last_row_cols, last_row_offset;
 
 	wl_list_for_each(c, &clients, link) {
-		if (c->mon == m)
+		if (c->mon == m && (!c->ws || c->ws->id != SCRATCHPAD_WORKSPACE))
 			n++;
 	}
 	if (n == 0) {
@@ -535,7 +546,7 @@ overview(Monitor *m)
 	last_row_offset = (available_w - (last_row_cols * tile_w)) / 2;
 
 	wl_list_for_each(c, &clients, link) {
-		if (c->mon != m)
+		if (c->mon != m || (c->ws && c->ws->id == SCRATCHPAD_WORKSPACE))
 			continue;
 
 		row = i / cols;
@@ -624,7 +635,7 @@ updatelabeloverlays(Monitor *m)
 		char lbl, upper_lbl;
 		struct wlr_scene_rect *bg_inner, *pixel;
 
-		if (c->mon != m) {
+		if (c->mon != m || (c->ws && c->ws->id == SCRATCHPAD_WORKSPACE)) {
 			destroylabeloverlay(c);
 			continue;
 		}
@@ -747,7 +758,7 @@ focusdir(const Arg *arg)
 		double wrap_primary = 0, wrap_secondary = 0;
 		double dist, wdist;
 
-		if (tc == c || (selmon->isoverview ? (tc->mon != selmon) : !VISIBLEON(tc, selmon)))
+		if (tc == c || (selmon->isoverview ? (tc->mon != selmon || (tc->ws && tc->ws->id == SCRATCHPAD_WORKSPACE)) : !VISIBLEON(tc, selmon)))
 			continue;
 
 		if (is_scratch && (!tc->ws || tc->ws->id != SCRATCHPAD_WORKSPACE))

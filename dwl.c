@@ -39,7 +39,7 @@ static void destroynotify(struct wl_listener *listener, void *data);
 static void destroypointerconstraint(struct wl_listener *listener, void *data);
 static void destroysessionlock(struct wl_listener *listener, void *data);
 void dwindle(Monitor *m);
-void fibonacci(Monitor *m, int s);
+void fibonacci(Monitor *m);
 void focusclient(Client *c, int lift);
 void focusmon(const Arg *arg);
 void focusstack(const Arg *arg);
@@ -201,18 +201,26 @@ static struct wlr_xwayland *xwayland;
 void
 applybounds(Client *c, struct wlr_box *bbox)
 {
-	/* set minimum possible bounds enforcing min_width and min_height */
-	c->geom.width = MAX((int)min_width + 2 * (int)c->bw, c->geom.width);
-	c->geom.height = MAX((int)min_height + 2 * (int)c->bw, c->geom.height);
+	if (!c)
+		return;
 
-	if (c->geom.x >= bbox->x + bbox->width)
-		c->geom.x = bbox->x + bbox->width - c->geom.width;
-	if (c->geom.y >= bbox->y + bbox->height)
-		c->geom.y = bbox->y + bbox->height - c->geom.height;
-	if (c->geom.x + c->geom.width <= bbox->x)
-		c->geom.x = bbox->x;
-	if (c->geom.y + c->geom.height <= bbox->y)
-		c->geom.y = bbox->y;
+	if (c->isfloating) {
+		/* set minimum possible bounds enforcing min_width and min_height for floating windows */
+		c->geom.width = MAX((int)min_width + 2 * (int)c->bw, c->geom.width);
+		c->geom.height = MAX((int)min_height + 2 * (int)c->bw, c->geom.height);
+
+		if (c->geom.x >= bbox->x + bbox->width)
+			c->geom.x = bbox->x + bbox->width - c->geom.width;
+		if (c->geom.y >= bbox->y + bbox->height)
+			c->geom.y = bbox->y + bbox->height - c->geom.height;
+		if (c->geom.x + c->geom.width <= bbox->x)
+			c->geom.x = bbox->x;
+		if (c->geom.y + c->geom.height <= bbox->y)
+			c->geom.y = bbox->y;
+	} else {
+		c->geom.width = MAX(2 * (int)c->bw + 1, c->geom.width);
+		c->geom.height = MAX(2 * (int)c->bw + 1, c->geom.height);
+	}
 }
 
 void
@@ -741,7 +749,7 @@ focustop(Monitor *m)
 
 	if (m->isoverview) {
 		wl_list_for_each(c, &fstack, flink) {
-			if (c->mon == m)
+			if (c->mon == m && (!c->ws || c->ws->id != SCRATCHPAD_WORKSPACE))
 				return c;
 		}
 		return NULL;
@@ -1087,7 +1095,7 @@ resize(Client *c, struct wlr_box geo, int interact)
 
 	bbox = interact ? &sgeom : &c->mon->w;
 
-	client_set_bounds(c, geo.width, geo.height);
+	client_set_bounds(c, MAX(1, geo.width - 2 * (int)c->bw), MAX(1, geo.height - 2 * (int)c->bw));
 	c->geom = geo;
 	applybounds(c, bbox);
 
@@ -1111,8 +1119,8 @@ resize(Client *c, struct wlr_box geo, int interact)
 	wlr_scene_node_for_each_buffer(&c->scene_surface->node, setcorner_radius_cb, &inner_radius);
 
 	/* this is a no-op if size hasn't changed */
-	c->resize = client_set_size(c, c->geom.width - 2 * c->bw,
-			c->geom.height - 2 * c->bw);
+	c->resize = client_set_size(c, MAX(1, c->geom.width - 2 * (int)c->bw),
+			MAX(1, c->geom.height - 2 * (int)c->bw));
 	wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
 }
 
@@ -1576,6 +1584,9 @@ unmapnotify(struct wl_listener *listener, void *data)
 	if (c == grabc) {
 		cursor_mode = CurNormal;
 		grabc = NULL;
+		destroy_snap_overlay();
+	} else {
+		destroy_snap_overlay();
 	}
 
 	wl_list_for_each(m_iter, &mons, link) {

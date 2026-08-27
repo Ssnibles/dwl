@@ -19,8 +19,8 @@ node_create(NodeType type, Workspace *ws)
 	Node *node = ecalloc(1, sizeof(Node));
 	node->type = type;
 	node->split_type = SPLIT_HORIZONTAL;
-	node->ratio_h = 1.0f;
-	node->ratio_v = 1.0f;
+	node->ratio_h = 0.5f;
+	node->ratio_v = 0.5f;
 	node->ws = ws;
 	wl_list_init(&node->children);
 	wl_list_init(&node->link);
@@ -459,8 +459,8 @@ tree_equalize_node(Node *node)
 	if (!node)
 		return;
 
-	node->ratio_h = 1.0f;
-	node->ratio_v = 1.0f;
+	node->ratio_h = 0.5f;
+	node->ratio_v = 0.5f;
 	wl_list_for_each(child, &node->children, link) {
 		tree_equalize_node(child);
 	}
@@ -625,10 +625,13 @@ void
 tree_resize_dir(const Arg *arg)
 {
 	Client *sel;
-	float delta = 0.15f;
+	float delta = 0.05f;
 	int dir, is_horiz;
 	const Layout *lt;
 	Workspace *ws;
+	Client *leaves[128];
+	int n, idx = -1, i;
+	Node *target_node, *prev_node, *next_node;
 
 	if (!selmon || !arg)
 		return;
@@ -671,8 +674,9 @@ tree_resize_dir(const Arg *arg)
 
 	/* 1. Handling tree_layout & bsp_layout */
 	if (lt && (lt->arrange == tree_layout || lt->arrange == bsp_layout)) {
-		Node *target_node = NULL, *curr, *parent = NULL;
+		Node *curr, *parent = NULL;
 		Node *prev_sub = NULL, *next_sub = NULL;
+		target_node = NULL;
 
 		for (curr = sel->node; curr; curr = curr->parent) {
 			if (curr->parent && curr->parent->split_type != SPLIT_NONE) {
@@ -700,13 +704,11 @@ tree_resize_dir(const Arg *arg)
 	}
 
 	/* 2. Handling flat workspace leaf layouts (tile, master_stack, columns, dwindle, spiral) */
-	Client *leaves[128];
-	int n = node_collect_leaves(ws ? ws->root : NULL, leaves, 128);
+	n = node_collect_leaves(ws ? ws->root : NULL, leaves, 128);
 	if (n <= 1)
 		return;
 
-	int idx = -1;
-	for (int i = 0; i < n; i++) {
+	for (i = 0; i < n; i++) {
 		if (leaves[i] == sel) {
 			idx = i;
 			break;
@@ -723,8 +725,9 @@ tree_resize_dir(const Arg *arg)
 				selmon->mfact = MAX(0.1f, selmon->mfact - delta);
 		} else {
 			int nm = MIN(n, selmon->nmaster);
-			Node *target_node = sel->node;
-			Node *prev_node = NULL, *next_node = NULL;
+			target_node = sel->node;
+			prev_node = NULL;
+			next_node = NULL;
 
 			if (idx < nm) { /* In Master Column */
 				if (idx > 0 && leaves[idx - 1]->node)
@@ -743,10 +746,62 @@ tree_resize_dir(const Arg *arg)
 		return;
 	}
 
-	/* columns, dwindle, spiral layouts */
-	Node *target_node = sel->node;
-	Node *prev_node = (idx > 0 && leaves[idx - 1]->node) ? leaves[idx - 1]->node : NULL;
-	Node *next_node = (idx < n - 1 && leaves[idx + 1]->node) ? leaves[idx + 1]->node : NULL;
+	/* 3. Handling dwindle, spiral, fibonacci layouts */
+	if (lt && (lt->arrange == dwindle || lt->arrange == spiral || lt->arrange == fibonacci)) {
+		int is_dwindle = (lt->arrange == dwindle);
+		int start_d = (idx < n - 1) ? idx : (n - 2);
+		int target_d = -1;
+		int d;
+
+		for (d = start_d; d >= 0; d--) {
+			int mode = is_dwindle ? (d % 2) : (d % 4);
+			int split_is_horiz = (mode % 2 == 0);
+			if (split_is_horiz == is_horiz) {
+				target_d = d;
+				break;
+			}
+		}
+
+		if (target_d >= 0 && leaves[target_d] && leaves[target_d]->node) {
+			Node *split_node = leaves[target_d]->node;
+			int mode = is_dwindle ? (target_d % 2) : (target_d % 4);
+			int increase = 0;
+
+			switch (mode) {
+			case 0: /* Horizontal: b1 = LEFT, b2 = RIGHT */
+				increase = (dir == WLR_DIRECTION_RIGHT);
+				break;
+			case 1: /* Vertical: b1 = TOP, b2 = BOTTOM */
+				increase = (dir == WLR_DIRECTION_DOWN);
+				break;
+			case 2: /* Horizontal: b1 = RIGHT, b2 = LEFT */
+				increase = (dir == WLR_DIRECTION_LEFT);
+				break;
+			case 3: /* Vertical: b1 = BOTTOM, b2 = TOP */
+				increase = (dir == WLR_DIRECTION_UP);
+				break;
+			}
+
+			if (is_horiz) {
+				if (increase)
+					split_node->ratio_h = clamp_ratio(split_node->ratio_h + delta);
+				else
+					split_node->ratio_h = clamp_ratio(split_node->ratio_h - delta);
+			} else {
+				if (increase)
+					split_node->ratio_v = clamp_ratio(split_node->ratio_v + delta);
+				else
+					split_node->ratio_v = clamp_ratio(split_node->ratio_v - delta);
+			}
+			arrange(selmon);
+		}
+		return;
+	}
+
+	/* 4. Handling columns layout */
+	target_node = sel->node;
+	prev_node = (idx > 0 && leaves[idx - 1]->node) ? leaves[idx - 1]->node : NULL;
+	next_node = (idx < n - 1 && leaves[idx + 1]->node) ? leaves[idx + 1]->node : NULL;
 
 	adjust_node_ratio(target_node, prev_node, next_node, dir, is_horiz, delta);
 	arrange(selmon);

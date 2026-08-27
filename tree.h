@@ -46,8 +46,8 @@ struct Node {
 static inline float
 clamp_ratio(float r)
 {
-	if (r < 0.1f) return 0.1f;
-	if (r > 10.0f) return 10.0f;
+	if (r < 0.05f) return 0.05f;
+	if (r > 0.95f) return 0.95f;
 	return r;
 }
 
