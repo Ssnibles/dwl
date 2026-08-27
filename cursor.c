@@ -74,7 +74,7 @@ update_snap_overlay(struct wlr_box box, SnapTargetType type)
 	}
 
 	if (!snap_overlay_tree) {
-		snap_overlay_tree = wlr_scene_tree_create(layers[LyrOverlay]);
+		snap_overlay_tree = wlr_scene_tree_create(layers[LyrFloat]);
 		if (!snap_overlay_tree)
 			return;
 
@@ -96,7 +96,10 @@ update_snap_overlay(struct wlr_box box, SnapTargetType type)
 
 	wlr_scene_node_set_position(&snap_overlay_tree->node, box.x, box.y);
 	wlr_scene_node_set_enabled(&snap_overlay_tree->node, true);
-	wlr_scene_node_raise_to_top(&snap_overlay_tree->node);
+	if (grabc && grabc->scene)
+		wlr_scene_node_place_below(&snap_overlay_tree->node, &grabc->scene->node);
+	else
+		wlr_scene_node_raise_to_top(&snap_overlay_tree->node);
 }
 
 void
