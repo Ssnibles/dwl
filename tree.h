@@ -72,6 +72,9 @@ int node_collect_leaves(Node *node, struct Client **array, int max);
 void node_arrange_recursive(Node *node, struct wlr_box box);
 void node_free_tree(Node *node);
 
+/* Live IPC Exporter */
+void tree_export_ipc(struct Workspace *ws);
+
 /* Tree Manipulation & Sizing Helpers */
 void tree_resize_node(Node *node, float delta);
 void tree_swap_nodes(Node *a, Node *b);

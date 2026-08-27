@@ -42,6 +42,32 @@
               "MANDIR=$(out)/share/man"
             ];
           };
+
+          tree-viewer = pkgs.stdenv.mkDerivation {
+            pname = "dwl-tree-viewer";
+            version = "0.8-dev";
+            src = ./.;
+
+            nativeBuildInputs = with pkgs; [
+              pkg-config
+            ];
+
+            buildInputs = with pkgs; [
+              raylib
+              wlroots_0_19
+              wayland
+              libGL
+            ];
+
+            buildPhase = ''
+              make tree-viewer
+            '';
+
+            installPhase = ''
+              mkdir -p $out/bin
+              cp tree-viewer $out/bin/tree-viewer
+            '';
+          };
         }
       );
 
@@ -78,6 +104,14 @@
             type = "app";
             program = "${applyScript}/bin/dwl-apply";
           };
+          tree-viewer = {
+            type = "app";
+            program = "${self.packages.${system}.tree-viewer}/bin/tree-viewer";
+          };
+          tree-view = {
+            type = "app";
+            program = "${self.packages.${system}.tree-viewer}/bin/tree-viewer";
+          };
         }
       );
 
@@ -87,8 +121,11 @@
         in {
           default = pkgs.mkShell {
             inputsFrom = [ self.packages.${system}.default ];
+            packages = with pkgs; [ raylib self.packages.${system}.tree-viewer ];
           };
         }
       );
     };
 }
+
+

@@ -19,6 +19,10 @@ LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 all: dwl
 dwl: dwl.o util.o rules.o layout.o cursor.o seat.o output.o layers.o tree.o workspace.o
 	$(CC) dwl.o util.o rules.o layout.o cursor.o seat.o output.o layers.o tree.o workspace.o $(DWLCFLAGS) $(LDFLAGS) $(LDLIBS) -o $@
+
+tree-viewer: tree_viewer.c
+	$(CC) tree_viewer.c -I. `pkg-config --cflags raylib wlroots-0.19 wayland-server` `pkg-config --libs raylib wlroots-0.19 wayland-server` -lGL -lm -lpthread -ldl -o $@
+
 dwl.o: dwl.c dwl.h tree.h workspace.h rules.h layout.h cursor.h seat.h output.h layers.h util.h client.h config.h config.mk cursor-shape-v1-protocol.h \
 	pointer-constraints-unstable-v1-protocol.h wlr-layer-shell-unstable-v1-protocol.h \
 	wlr-output-power-management-unstable-v1-protocol.h xdg-shell-protocol.h

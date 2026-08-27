@@ -61,6 +61,7 @@ arrange(Monitor *m)
 		if (m->active_workspace) {
 			lt = m->active_workspace->layout ? m->active_workspace->layout : m->lt[m->sellt];
 			arrange_workspace(m, m->active_workspace, m->w, lt);
+			tree_export_ipc(m->active_workspace);
 		}
 
 		if (m->scratchpad_showing) {
