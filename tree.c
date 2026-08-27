@@ -117,6 +117,84 @@ node_insert_client(Workspace *ws, Client *c)
 	return leaf;
 }
 
+Node *
+node_insert_client_at(Workspace *ws, Client *c, Client *at, int dir)
+{
+	Node *target_parent, *leaf, *target_node;
+	SplitType desired_split;
+	int insert_before;
+
+	if (!ws || !ws->root || !c)
+		return NULL;
+
+	if (c->node && c->ws == ws)
+		return c->node;
+
+	if (!at || !at->node || at->ws != ws)
+		return node_insert_client(ws, c);
+
+	target_node = at->node;
+	target_parent = target_node->parent ? target_node->parent : ws->root;
+
+	leaf = node_create(NODE_LEAF, ws);
+	leaf->client = c;
+	c->node = leaf;
+
+	switch (dir) {
+	case WLR_DIRECTION_LEFT:
+		desired_split = SPLIT_HORIZONTAL;
+		insert_before = 1;
+		break;
+	case WLR_DIRECTION_RIGHT:
+		desired_split = SPLIT_HORIZONTAL;
+		insert_before = 0;
+		break;
+	case WLR_DIRECTION_UP:
+		desired_split = SPLIT_VERTICAL;
+		insert_before = 1;
+		break;
+	case WLR_DIRECTION_DOWN:
+		desired_split = SPLIT_VERTICAL;
+		insert_before = 0;
+		break;
+	default:
+		desired_split = SPLIT_HORIZONTAL;
+		insert_before = 0;
+		break;
+	}
+
+	if (target_parent->children.next != &target_parent->children &&
+	    target_parent->children.next == target_parent->children.prev) {
+		target_parent->split_type = desired_split;
+	}
+
+	if (target_parent->split_type == desired_split) {
+		if (insert_before) {
+			leaf->parent = target_parent;
+			leaf->ws = ws;
+			wl_list_remove(&leaf->link);
+			wl_list_insert(target_node->link.prev, &leaf->link);
+		} else {
+			node_insert_after(target_node, leaf);
+		}
+	} else {
+		Node *container = node_create(NODE_CONTAINER, ws);
+		container->split_type = desired_split;
+
+		node_insert_after(target_node, container);
+		if (insert_before) {
+			node_insert_child(container, leaf);
+			node_insert_child(container, target_node);
+		} else {
+			node_insert_child(container, target_node);
+			node_insert_child(container, leaf);
+		}
+	}
+
+	ws->focused_node = leaf;
+	return leaf;
+}
+
 static void
 node_collapse_container(Node *container)
 {

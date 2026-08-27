@@ -135,12 +135,25 @@ buttonpress(struct wl_listener *listener, void *data)
 					if (at && at->geom.width > 0 && at->geom.height > 0) {
 						double norm_x = (cursor->x - at->geom.x) / (double)at->geom.width - 0.5;
 						double norm_y = (cursor->y - at->geom.y) / (double)at->geom.height - 0.5;
-						int before = (fabs(norm_x) > fabs(norm_y)) ? (norm_x < 0) : (norm_y < 0);
+						int dir;
+						int before;
+						Workspace *ws;
+
+						if (fabs(norm_x) > fabs(norm_y))
+							dir = (norm_x < 0) ? WLR_DIRECTION_LEFT : WLR_DIRECTION_RIGHT;
+						else
+							dir = (norm_y < 0) ? WLR_DIRECTION_UP : WLR_DIRECTION_DOWN;
+
+						before = (dir == WLR_DIRECTION_LEFT || dir == WLR_DIRECTION_UP);
 						wl_list_remove(&grabc->link);
 						if (before)
 							wl_list_insert(at->link.prev, &grabc->link);
 						else
 							wl_list_insert(&at->link, &grabc->link);
+
+						ws = grabc->mon ? grabc->mon->active_workspace : selmon->active_workspace;
+						if (ws)
+							node_insert_client_at(ws, grabc, at, dir);
 					}
 					setfloating(grabc, 0);
 

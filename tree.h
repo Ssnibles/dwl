@@ -57,6 +57,7 @@ void node_insert_child(Node *parent, Node *child);
 void node_insert_after(Node *sibling, Node *child);
 int node_is_ancestor(Node *ancestor, Node *node);
 Node *node_insert_client(struct Workspace *ws, struct Client *c);
+Node *node_insert_client_at(struct Workspace *ws, struct Client *c, struct Client *at, int dir);
 void node_remove(Node *node);
 Node *node_find_client(Node *root, struct Client *c);
 int node_count_leaves(Node *node);
