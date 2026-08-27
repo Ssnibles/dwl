@@ -739,3 +739,27 @@ setcursorshape(struct wl_listener *listener, void *data)
 		wlr_cursor_set_xcursor(cursor, cursor_mgr,
 				wlr_cursor_shape_v1_name(event->shape));
 }
+
+void
+createpointerconstraint(struct wl_listener *listener, void *data)
+{
+	PointerConstraint *pointer_constraint = ecalloc(1, sizeof(*pointer_constraint));
+	pointer_constraint->constraint = data;
+	LISTEN(&pointer_constraint->constraint->events.destroy,
+			&pointer_constraint->destroy, destroypointerconstraint);
+}
+
+void
+destroypointerconstraint(struct wl_listener *listener, void *data)
+{
+	PointerConstraint *pointer_constraint = wl_container_of(listener, pointer_constraint, destroy);
+
+	if (active_constraint == pointer_constraint->constraint) {
+		cursorwarptohint();
+		active_constraint = NULL;
+	}
+
+	wl_list_remove(&pointer_constraint->destroy.link);
+	free(pointer_constraint);
+}
+

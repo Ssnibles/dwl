@@ -3,12 +3,17 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <libinput.h>
 #include <wayland-server-core.h>
+#include <wlr/backend/libinput.h>
 #include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_keyboard_group.h>
+#include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
@@ -16,6 +21,7 @@
 
 #include "dwl.h"
 #include "seat.h"
+#include "cursor.h"
 #include "layout.h"
 #include "client.h"
 #include "config.h"
@@ -266,4 +272,129 @@ virtualpointer(struct wl_listener *listener, void *data)
 	wlr_cursor_attach_input_device(cursor, device);
 	if (event->suggested_output)
 		wlr_cursor_map_input_to_output(cursor, device, event->suggested_output);
+}
+
+void
+inputdevice(struct wl_listener *listener, void *data)
+{
+	/* This event is raised by the backend when a new input device becomes
+	 * available. */
+	struct wlr_input_device *device = data;
+	uint32_t caps;
+
+	switch (device->type) {
+	case WLR_INPUT_DEVICE_KEYBOARD:
+		createkeyboard(wlr_keyboard_from_input_device(device));
+		break;
+	case WLR_INPUT_DEVICE_POINTER:
+		createpointer(wlr_pointer_from_input_device(device));
+		break;
+	default:
+		/* TODO handle other input device types */
+		break;
+	}
+
+	caps = WL_SEAT_CAPABILITY_POINTER;
+	if (!wl_list_empty(&kb_group->wlr_group->devices))
+		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+	wlr_seat_set_capabilities(seat, caps);
+}
+
+void
+createpointer(struct wlr_pointer *pointer)
+{
+	struct libinput_device *device;
+	if (wlr_input_device_is_libinput(&pointer->base)
+			&& (device = wlr_libinput_get_device_handle(&pointer->base))) {
+
+		if (libinput_device_config_tap_get_finger_count(device)) {
+			libinput_device_config_tap_set_enabled(device, tap_to_click);
+			libinput_device_config_tap_set_drag_enabled(device, tap_and_drag);
+			libinput_device_config_tap_set_drag_lock_enabled(device, drag_lock);
+			libinput_device_config_tap_set_button_map(device, button_map);
+		}
+
+		if (libinput_device_config_scroll_has_natural_scroll(device)) {
+			int is_touchpad = libinput_device_config_tap_get_finger_count(device) > 0;
+			libinput_device_config_scroll_set_natural_scroll_enabled(
+					device, is_touchpad ? natural_scrolling : mouse_natural_scrolling);
+		}
+
+		if (libinput_device_config_dwt_is_available(device))
+			libinput_device_config_dwt_set_enabled(device, disable_while_typing);
+
+		if (libinput_device_config_left_handed_is_available(device))
+			libinput_device_config_left_handed_set(device, left_handed);
+
+		if (libinput_device_config_middle_emulation_is_available(device))
+			libinput_device_config_middle_emulation_set_enabled(device, middle_button_emulation);
+
+		if (libinput_device_config_scroll_get_methods(device) != LIBINPUT_CONFIG_SCROLL_NO_SCROLL)
+			libinput_device_config_scroll_set_method(device, scroll_method);
+
+		if (libinput_device_config_click_get_methods(device) != LIBINPUT_CONFIG_CLICK_METHOD_NONE)
+			libinput_device_config_click_set_method(device, click_method);
+
+		if (libinput_device_config_send_events_get_modes(device))
+			libinput_device_config_send_events_set_mode(device, send_events_mode);
+
+		if (libinput_device_config_accel_is_available(device)) {
+			libinput_device_config_accel_set_profile(device, accel_profile);
+			libinput_device_config_accel_set_speed(device, accel_speed);
+		}
+	}
+
+	wlr_cursor_attach_input_device(cursor, &pointer->base);
+}
+
+void
+requeststartdrag(struct wl_listener *listener, void *data)
+{
+	struct wlr_seat_request_start_drag_event *event = data;
+
+	if (wlr_seat_validate_pointer_grab_serial(seat, event->origin,
+			event->serial))
+		wlr_seat_start_pointer_drag(seat, event->drag, event->serial);
+	else
+		wlr_data_source_destroy(event->drag->source);
+}
+
+void
+startdrag(struct wl_listener *listener, void *data)
+{
+	struct wlr_drag *drag = data;
+	if (!drag->icon)
+		return;
+
+	drag->icon->data = &wlr_scene_drag_icon_create(drag_icon, drag->icon)->node;
+	LISTEN_STATIC(&drag->icon->events.destroy, destroydragicon);
+}
+
+void
+destroydragicon(struct wl_listener *listener, void *data)
+{
+	/* Focus enter isn't sent during drag, so refocus the focused node. */
+	focusclient(focustop(selmon), 1);
+	motionnotify(0, NULL, 0, 0, 0, 0);
+	wl_list_remove(&listener->link);
+	free(listener);
+}
+
+void
+createidleinhibitor(struct wl_listener *listener, void *data)
+{
+	struct wlr_idle_inhibitor_v1 *idle_inhibitor = data;
+	LISTEN_STATIC(&idle_inhibitor->events.destroy, destroyidleinhibitor);
+
+	checkidleinhibitor(NULL);
+}
+
+void
+destroyidleinhibitor(struct wl_listener *listener, void *data)
+{
+	/* `data` is the wlr_surface of the idle inhibitor being destroyed,
+	 * at this point the idle inhibitor is still in the list of the manager */
+	checkidleinhibitor(wlr_surface_get_root_surface(data));
+	wl_list_remove(&listener->link);
+	free(listener);
 }

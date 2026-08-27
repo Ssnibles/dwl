@@ -20,18 +20,12 @@ void buttonpress(struct wl_listener *listener, void *data);
 void chvt(const Arg *arg);
 void checkidleinhibitor(struct wlr_surface *exclude);
 void commitnotify(struct wl_listener *listener, void *data);
-static void createidleinhibitor(struct wl_listener *listener, void *data);
 static void createlocksurface(struct wl_listener *listener, void *data);
-static void createpointer(struct wlr_pointer *pointer);
-static void createpointerconstraint(struct wl_listener *listener, void *data);
 void cursorconstrain(struct wlr_pointer_constraint_v1 *constraint);
 void cursorframe(struct wl_listener *listener, void *data);
 void cursorwarptohint(void);
-static void destroydragicon(struct wl_listener *listener, void *data);
-static void destroyidleinhibitor(struct wl_listener *listener, void *data);
 static void destroylock(SessionLock *lock, int unlocked);
 void destroynotify(struct wl_listener *listener, void *data);
-static void destroypointerconstraint(struct wl_listener *listener, void *data);
 static void destroysessionlock(struct wl_listener *listener, void *data);
 void dwindle(Monitor *m);
 void fibonacci(Monitor *m);
@@ -41,7 +35,6 @@ void focusstack(const Arg *arg);
 Client *focustop(Monitor *m);
 static void gpureset(struct wl_listener *listener, void *data);
 void incnmaster(const Arg *arg);
-static void inputdevice(struct wl_listener *listener, void *data);
 void killclient(const Arg *arg);
 static void locksession(struct wl_listener *listener, void *data);
 void mapnotify(struct wl_listener *listener, void *data);
@@ -55,7 +48,6 @@ void pointerfocus(Client *c, struct wlr_surface *surface,
 		double sx, double sy, uint32_t time);
 void printstatus(void);
 void quit(const Arg *arg);
-static void requeststartdrag(struct wl_listener *listener, void *data);
 void resize(Client *c, struct wlr_box geo, int interact);
 void setcursor(struct wl_listener *listener, void *data);
 void setcursorshape(struct wl_listener *listener, void *data);
@@ -68,7 +60,6 @@ static void setpsel(struct wl_listener *listener, void *data);
 static void setsel(struct wl_listener *listener, void *data);
 void spawn(const Arg *arg);
 void spiral(Monitor *m);
-static void startdrag(struct wl_listener *listener, void *data);
 void tagmon(const Arg *arg);
 void tile(Monitor *m);
 void togglefloating(const Arg *arg);
@@ -243,15 +234,6 @@ commitnotify(struct wl_listener *listener, void *data)
 }
 
 void
-createidleinhibitor(struct wl_listener *listener, void *data)
-{
-	struct wlr_idle_inhibitor_v1 *idle_inhibitor = data;
-	LISTEN_STATIC(&idle_inhibitor->events.destroy, destroyidleinhibitor);
-
-	checkidleinhibitor(NULL);
-}
-
-void
 createlocksurface(struct wl_listener *listener, void *data)
 {
 	SessionLock *lock = wl_container_of(listener, lock, new_surface);
@@ -270,81 +252,7 @@ createlocksurface(struct wl_listener *listener, void *data)
 		client_notify_enter(lock_surface->surface, wlr_seat_get_keyboard(seat));
 }
 
-void
-createpointer(struct wlr_pointer *pointer)
-{
-	struct libinput_device *device;
-	if (wlr_input_device_is_libinput(&pointer->base)
-			&& (device = wlr_libinput_get_device_handle(&pointer->base))) {
 
-		if (libinput_device_config_tap_get_finger_count(device)) {
-			libinput_device_config_tap_set_enabled(device, tap_to_click);
-			libinput_device_config_tap_set_drag_enabled(device, tap_and_drag);
-			libinput_device_config_tap_set_drag_lock_enabled(device, drag_lock);
-			libinput_device_config_tap_set_button_map(device, button_map);
-		}
-
-		if (libinput_device_config_scroll_has_natural_scroll(device)) {
-			int is_touchpad = libinput_device_config_tap_get_finger_count(device) > 0;
-			libinput_device_config_scroll_set_natural_scroll_enabled(
-					device, is_touchpad ? natural_scrolling : mouse_natural_scrolling);
-		}
-
-		if (libinput_device_config_dwt_is_available(device))
-			libinput_device_config_dwt_set_enabled(device, disable_while_typing);
-
-		if (libinput_device_config_left_handed_is_available(device))
-			libinput_device_config_left_handed_set(device, left_handed);
-
-		if (libinput_device_config_middle_emulation_is_available(device))
-			libinput_device_config_middle_emulation_set_enabled(device, middle_button_emulation);
-
-		if (libinput_device_config_scroll_get_methods(device) != LIBINPUT_CONFIG_SCROLL_NO_SCROLL)
-			libinput_device_config_scroll_set_method(device, scroll_method);
-
-		if (libinput_device_config_click_get_methods(device) != LIBINPUT_CONFIG_CLICK_METHOD_NONE)
-			libinput_device_config_click_set_method(device, click_method);
-
-		if (libinput_device_config_send_events_get_modes(device))
-			libinput_device_config_send_events_set_mode(device, send_events_mode);
-
-		if (libinput_device_config_accel_is_available(device)) {
-			libinput_device_config_accel_set_profile(device, accel_profile);
-			libinput_device_config_accel_set_speed(device, accel_speed);
-		}
-	}
-
-	wlr_cursor_attach_input_device(cursor, &pointer->base);
-}
-
-void
-createpointerconstraint(struct wl_listener *listener, void *data)
-{
-	PointerConstraint *pointer_constraint = ecalloc(1, sizeof(*pointer_constraint));
-	pointer_constraint->constraint = data;
-	LISTEN(&pointer_constraint->constraint->events.destroy,
-			&pointer_constraint->destroy, destroypointerconstraint);
-}
-
-void
-destroydragicon(struct wl_listener *listener, void *data)
-{
-	/* Focus enter isn't sent during drag, so refocus the focused node. */
-	focusclient(focustop(selmon), 1);
-	motionnotify(0, NULL, 0, 0, 0, 0);
-	wl_list_remove(&listener->link);
-	free(listener);
-}
-
-void
-destroyidleinhibitor(struct wl_listener *listener, void *data)
-{
-	/* `data` is the wlr_surface of the idle inhibitor being destroyed,
-	 * at this point the idle inhibitor is still in the list of the manager */
-	checkidleinhibitor(wlr_surface_get_root_surface(data));
-	wl_list_remove(&listener->link);
-	free(listener);
-}
 
 void
 destroylock(SessionLock *lock, int unlock)
@@ -423,19 +331,7 @@ destroynotify(struct wl_listener *listener, void *data)
 	free(c);
 }
 
-void
-destroypointerconstraint(struct wl_listener *listener, void *data)
-{
-	PointerConstraint *pointer_constraint = wl_container_of(listener, pointer_constraint, destroy);
 
-	if (active_constraint == pointer_constraint->constraint) {
-		cursorwarptohint();
-		active_constraint = NULL;
-	}
-
-	wl_list_remove(&pointer_constraint->destroy.link);
-	free(pointer_constraint);
-}
 
 void
 destroysessionlock(struct wl_listener *listener, void *data)
@@ -597,35 +493,7 @@ gpureset(struct wl_listener *listener, void *data)
 	wlr_renderer_destroy(old_drw);
 }
 
-void
-inputdevice(struct wl_listener *listener, void *data)
-{
-	/* This event is raised by the backend when a new input device becomes
-	 * available. */
-	struct wlr_input_device *device = data;
-	uint32_t caps;
 
-	switch (device->type) {
-	case WLR_INPUT_DEVICE_KEYBOARD:
-		createkeyboard(wlr_keyboard_from_input_device(device));
-		break;
-	case WLR_INPUT_DEVICE_POINTER:
-		createpointer(wlr_pointer_from_input_device(device));
-		break;
-	default:
-		/* TODO handle other input device types */
-		break;
-	}
-
-	/* We need to let the wlr_seat know what our capabilities are, which is
-	 * communiciated to the client. In dwl we always have a cursor, even if
-	 * there are no pointer devices, so we always include that capability. */
-	/* TODO do we actually require a cursor? */
-	caps = WL_SEAT_CAPABILITY_POINTER;
-	if (!wl_list_empty(&kb_group->wlr_group->devices))
-		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-	wlr_seat_set_capabilities(seat, caps);
-}
 
 void
 killclient(const Arg *arg)
@@ -816,17 +684,7 @@ quit(const Arg *arg)
 	wl_display_terminate(dpy);
 }
 
-void
-requeststartdrag(struct wl_listener *listener, void *data)
-{
-	struct wlr_seat_request_start_drag_event *event = data;
 
-	if (wlr_seat_validate_pointer_grab_serial(seat, event->origin,
-			event->serial))
-		wlr_seat_start_pointer_drag(seat, event->drag, event->serial);
-	else
-		wlr_data_source_destroy(event->drag->source);
-}
 
 void
 requestmonstate(struct wl_listener *listener, void *data)
@@ -1005,16 +863,7 @@ spawn(const Arg *arg)
 	}
 }
 
-void
-startdrag(struct wl_listener *listener, void *data)
-{
-	struct wlr_drag *drag = data;
-	if (!drag->icon)
-		return;
 
-	drag->icon->data = &wlr_scene_drag_icon_create(drag_icon, drag->icon)->node;
-	LISTEN_STATIC(&drag->icon->events.destroy, destroydragicon);
-}
 
 void
 tagmon(const Arg *arg)
