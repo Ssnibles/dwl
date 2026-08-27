@@ -59,13 +59,8 @@ destroy_snap_overlay(void)
 static void
 update_snap_overlay(struct wlr_box box, SnapTargetType type)
 {
-	const float border_center[4] = {0.85f, 0.20f, 0.20f, 0.75f};
-	const float bg_center[4]     = {0.40f, 0.05f, 0.05f, 0.50f};
-	const float border_edge[4]   = {0.75f, 0.15f, 0.15f, 0.70f};
-	const float bg_edge[4]       = {0.50f, 0.05f, 0.05f, 0.50f};
-
-	const float *b_color = (type == SNAP_CENTER) ? border_center : border_edge;
-	const float *f_color = (type == SNAP_CENTER) ? bg_center : bg_edge;
+	const float *b_color = (type == SNAP_CENTER) ? snap_border_center : snap_border_edge;
+	const float *f_color = (type == SNAP_CENTER) ? snap_bg_center : snap_bg_edge;
 	int bw = 2;
 
 	if (box.width <= 0 || box.height <= 0) {
@@ -234,6 +229,7 @@ buttonpress(struct wl_listener *listener, void *data)
 					setfloating(grabc, 0);
 					arrange(selmon);
 				} else if (was_move && grabc_was_tiled) {
+					/* No snap target: re-tile the window at its original position */
 					setfloating(grabc, 0);
 					arrange(selmon);
 				}

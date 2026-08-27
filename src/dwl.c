@@ -352,7 +352,7 @@ focusclient(Client *c, int lift)
 		return;
 
 	/* Raise client in stacking order if requested */
-	if (c && lift)
+	if (c && lift && c->scene)
 		wlr_scene_node_raise_to_top(&c->scene->node);
 
 	/* Put the new client atop the focus stack and select its monitor */
@@ -700,7 +700,9 @@ resize(Client *c, struct wlr_box geo, int interact)
 {
 	struct wlr_box *bbox;
 	struct wlr_box clip;
+	struct wlr_box surface_geom = {0};
 	int radius, inner_radius;
+	int bw_w, bw_h;
 
 	if (!c->mon || !client_surface(c)->mapped)
 		return;
@@ -711,19 +713,45 @@ resize(Client *c, struct wlr_box geo, int interact)
 	c->geom = geo;
 	applybounds(c, bbox);
 
-	if (c->geom.x == old_geom.x && c->geom.y == old_geom.y &&
-			c->geom.width == old_geom.width && c->geom.height == old_geom.height)
-		return;
+	int geom_changed = (c->geom.x != old_geom.x || c->geom.y != old_geom.y ||
+			c->geom.width != old_geom.width || c->geom.height != old_geom.height);
 
-	client_set_bounds(c, MAX(1, c->geom.width - 2 * (int)c->bw), MAX(1, c->geom.height - 2 * (int)c->bw));
+	if (geom_changed) {
+		client_set_bounds(c, MAX(1, c->geom.width - 2 * (int)c->bw), MAX(1, c->geom.height - 2 * (int)c->bw));
+		wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
+		wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
+
+		/* this is a no-op if size hasn't changed */
+		if (cursor_mode == CurResize && !c->isfloating) {
+			struct timespec now;
+			clock_gettime(CLOCK_MONOTONIC, &now);
+			int64_t ms_diff = (now.tv_sec - c->last_resize_time.tv_sec) * 1000 +
+					(now.tv_nsec - c->last_resize_time.tv_nsec) / 1000000;
+			if (ms_diff >= 8) {
+				c->resize = client_set_size(c, MAX(1, c->geom.width - 2 * (int)c->bw),
+						MAX(1, c->geom.height - 2 * (int)c->bw));
+				c->last_resize_time = now;
+			}
+		} else {
+			c->resize = client_set_size(c, MAX(1, c->geom.width - 2 * (int)c->bw),
+					MAX(1, c->geom.height - 2 * (int)c->bw));
+		}
+	}
 
 	client_get_clip(c, &clip);
 
 	/* Update scene-graph, including borders */
-	wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
-	wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
 	if (c->border) {
-		wlr_scene_rect_set_size(c->border, c->geom.width, c->geom.height);
+		client_get_geometry(c, &surface_geom);
+		bw_w = c->geom.width;
+		bw_h = c->geom.height;
+		if (surface_geom.width > 0 && surface_geom.height > 0) {
+			int cur_w = surface_geom.width + 2 * (int)c->bw;
+			int cur_h = surface_geom.height + 2 * (int)c->bw;
+			bw_w = MIN(c->geom.width, cur_w);
+			bw_h = MIN(c->geom.height, cur_h);
+		}
+		wlr_scene_rect_set_size(c->border, bw_w, bw_h);
 		wlr_scene_node_set_position(&c->border->node, 0, 0);
 
 		/* Set corner radius on background border */
@@ -736,21 +764,6 @@ resize(Client *c, struct wlr_box geo, int interact)
 	inner_radius = MAX(0, radius - (int)c->bw);
 	wlr_scene_node_for_each_buffer(&c->scene_surface->node, setcorner_radius_cb, &inner_radius);
 
-	/* this is a no-op if size hasn't changed */
-	if (cursor_mode == CurResize && !c->isfloating) {
-		struct timespec now;
-		clock_gettime(CLOCK_MONOTONIC, &now);
-		int64_t ms_diff = (now.tv_sec - c->last_resize_time.tv_sec) * 1000 +
-				(now.tv_nsec - c->last_resize_time.tv_nsec) / 1000000;
-		if (ms_diff >= 8) {
-			c->resize = client_set_size(c, MAX(1, c->geom.width - 2 * (int)c->bw),
-					MAX(1, c->geom.height - 2 * (int)c->bw));
-			c->last_resize_time = now;
-		}
-	} else {
-		c->resize = client_set_size(c, MAX(1, c->geom.width - 2 * (int)c->bw),
-				MAX(1, c->geom.height - 2 * (int)c->bw));
-	}
 	wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
 }
 
@@ -834,10 +847,18 @@ setmon(Client *c, Monitor *m)
 	if (oldmon)
 		arrange(oldmon);
 	if (m) {
-		/* Make sure window actually overlaps with the monitor */
-		resize(c, c->geom, 0);
-		setfullscreen(c, c->isfullscreen); /* This will call arrange(c->mon) */
-		setfloating(c, c->isfloating);
+		/* Make sure window layer surface is on the new monitor's scene layer */
+		if (c->scene) {
+			wlr_scene_node_reparent(&c->scene->node, layers[c->isfullscreen
+					? LyrFS : c->isfloating ? LyrFloat : LyrTile]);
+		}
+		if (c->isfullscreen) {
+			c->prev = c->geom;
+			resize(c, m->m, 0);
+		} else {
+			resize(c, c->geom, 0);
+		}
+		arrange(m);
 	}
 	focusclient(focustop(selmon), 1);
 }
@@ -945,13 +966,7 @@ unmapnotify(struct wl_listener *listener, void *data)
 		c->ws = NULL;
 		c->node = NULL;
 		if (m && ws && ws->id == SCRATCHPAD_WORKSPACE && m->scratchpad_showing) {
-			int remaining = 0;
-			Client *tmp;
-			wl_list_for_each(tmp, &clients, link) {
-				if (tmp->mon == m && tmp->ws && tmp->ws->id == SCRATCHPAD_WORKSPACE)
-					remaining++;
-			}
-			if (remaining == 0)
+			if (scratchpad_client_count(m) == 0)
 				m->scratchpad_showing = 0;
 		}
 		if (m)

@@ -27,6 +27,15 @@ void clearlabeloverlays(Monitor *m);
 void destroylabeloverlay(Client *c);
 void toggleoverview(const Arg *arg);
 void updatelabeloverlays(Monitor *m);
+
+static inline const Layout *
+resolve_layout(Client *c, Monitor *m, Workspace **out_ws)
+{
+	Workspace *ws = (c && c->ws) ? c->ws : (m ? m->active_workspace : NULL);
+	if (out_ws)
+		*out_ws = ws;
+	return (ws && ws->layout) ? ws->layout : (m ? m->lt[m->sellt] : NULL);
+}
 /*
  * Evaluates whether relative offset (dx, dy) matches specified spatial direction enum (left/right/up/down).
  * Returns non-zero if matching, and calculates weighted euclidean distance squared (penalizing off-axis distance by 3x).

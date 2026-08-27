@@ -172,13 +172,27 @@ move_to_workspace(const Arg *arg)
 		client_move_to_workspace(c, ws);
 }
 
+int
+scratchpad_client_count(Monitor *m)
+{
+	Client *c;
+	int n = 0;
+	if (!m)
+		return 0;
+	wl_list_for_each(c, &clients, link) {
+		if (c->mon == m && c->ws && c->ws->id == SCRATCHPAD_WORKSPACE)
+			n++;
+	}
+	return n;
+}
+
 void
 togglescratchpad_client(const Arg *arg)
 {
-	Client *c, *target_c = NULL;
+	Client *target_c = NULL;
 	Workspace *scratch_ws, *target_ws = NULL;
 	int target_id;
-	int remaining = 0;
+	(void)arg;
 
 	if (!selmon)
 		return;
@@ -187,35 +201,24 @@ togglescratchpad_client(const Arg *arg)
 	if (!scratch_ws)
 		return;
 
-	c = focustop(selmon);
-
-	if (c && c->ws && c->ws->id != SCRATCHPAD_WORKSPACE) {
-		/* Case A: Window is on a standard workspace -> Save origin & move to SCRATCHPAD_WORKSPACE silently */
-		c->prev_workspace = c->ws->id;
-		c->wasfloating = c->isfloating;
-		if (c->isfullscreen)
-			setfullscreen(c, 0);
-		client_move_to_workspace(c, scratch_ws);
-		return;
-	}
-
-	/* Case B / Fallback: Restore target client from scratchpad to standard workspace */
-	if (c && c->ws && c->ws->id == SCRATCHPAD_WORKSPACE) {
-		target_c = c;
-	} else {
-		/* Search for first client sitting in selmon's scratchpad */
-		wl_list_for_each(c, &clients, link) {
-			if (c->mon == selmon && c->ws == scratch_ws) {
-				target_c = c;
-				break;
-			}
-		}
-	}
-
+	target_c = focustop(selmon);
 	if (!target_c)
 		return;
 
-	/* Restore target_c to origin workspace or active workspace */
+	if (target_c->ws != scratch_ws) {
+		target_c->wasfloating = target_c->isfloating;
+		target_c->prev_workspace = target_c->ws ? target_c->ws->id : 1;
+		client_move_to_workspace(target_c, scratch_ws);
+		if (!target_c->isfloating)
+			setfloating(target_c, 1);
+
+		selmon->scratchpad_showing = 1;
+		arrange(selmon);
+		focusclient(target_c, 1);
+		motionnotify(0, NULL, 0, 0, 0, 0);
+		return;
+	}
+
 	target_id = target_c->prev_workspace;
 	target_c->prev_workspace = 0;
 
@@ -237,11 +240,7 @@ togglescratchpad_client(const Arg *arg)
 	target_c->wasfloating = 0;
 
 	/* Check if any scratchpad clients remain on selmon */
-	wl_list_for_each(c, &clients, link) {
-		if (c->mon == selmon && c->ws == scratch_ws)
-			remaining++;
-	}
-	if (remaining == 0)
+	if (scratchpad_client_count(selmon) == 0)
 		selmon->scratchpad_showing = 0;
 
 	arrange(selmon);

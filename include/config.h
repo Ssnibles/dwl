@@ -20,6 +20,12 @@ static const float urgentcolor[]           = COLOR(0xf7768eff);
 /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
 static const float fullscreen_bg[]         = {0.0f, 0.0f, 0.0f, 1.0f};
 
+/* Snap overlay colors */
+static const float snap_border_center[]    = COLOR(0xd93333bf);
+static const float snap_bg_center[]        = COLOR(0x660d0d80);
+static const float snap_border_edge[]      = COLOR(0xbf2626b3);
+static const float snap_bg_edge[]          = COLOR(0x800d0d80);
+
 /* Jump label characters for overview mode (defaults to left-hand keys, excluding hjkl) */
 static const char overview_labels[]        = "ASDFGQWERTZXCVB";
 

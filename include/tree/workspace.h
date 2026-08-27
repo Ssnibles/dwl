@@ -21,6 +21,7 @@ struct Workspace {
 	Node *focused_node;         /* Focused leaf or container node */
 	SplitType next_split;       /* Manual split direction for next window */
 	const Layout *layout;       /* Active layout algorithm */
+	unsigned int tree_gen;      /* Incremented on any tree mutation (insert/remove/collapse) */
 	struct wl_list link;        /* Linked list entry in Monitor->workspaces */
 };
 
@@ -38,5 +39,7 @@ void view_workspace(const union Arg *arg);
 void move_to_workspace(const union Arg *arg);
 void togglescratchpad_client(const union Arg *arg);
 void togglescratchpad_view(const union Arg *arg);
+
+int scratchpad_client_count(struct Monitor *m);
 
 #endif /* TREE_WORKSPACE_H */

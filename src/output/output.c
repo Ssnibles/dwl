@@ -163,7 +163,7 @@ closemon(Monitor *m)
 
 	wl_list_for_each(c, &clients, link) {
 		if (c->isfloating && c->geom.x > m->m.width)
-			resize(c, (struct wlr_box){.x = c->geom.x - m->w.width, .y = c->geom.y,
+			resize(c, (struct wlr_box){.x = c->geom.x - m->m.width, .y = c->geom.y,
 					.width = c->geom.width, .height = c->geom.height}, 0);
 		if (c->mon == m || (c->ws && c->ws->mon == m))
 			setmon(c, selmon);

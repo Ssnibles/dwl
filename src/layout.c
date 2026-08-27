@@ -59,7 +59,7 @@ arrange(Monitor *m)
 	} else {
 		const Layout *lt;
 		if (m->active_workspace) {
-			lt = m->active_workspace->layout ? m->active_workspace->layout : m->lt[m->sellt];
+			lt = resolve_layout(NULL, m, NULL);
 			arrange_workspace(m, m->active_workspace, m->w, lt);
 			if (cursor_mode != CurResize && cursor_mode != CurMove)
 				tree_export_ipc(m->active_workspace);
