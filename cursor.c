@@ -22,10 +22,81 @@
 #include "config.h"
 #include "tree.h"
 
+typedef enum {
+	SNAP_NONE = 0,
+	SNAP_CENTER,
+	SNAP_LEFT,
+	SNAP_RIGHT,
+	SNAP_TOP,
+	SNAP_BOTTOM
+} SnapTargetType;
+
 static int grabc_was_tiled;
 static struct wlr_box grabc_start_geom;
 
+static struct wlr_scene_tree *snap_overlay_tree = NULL;
+static struct wlr_scene_rect *snap_overlay_border = NULL;
+static struct wlr_scene_rect *snap_overlay_bg = NULL;
+static SnapTargetType active_snap_type = SNAP_NONE;
+static Client *active_snap_target = NULL;
+
 int in_pointer_focus = 0;
+
+void
+destroy_snap_overlay(void)
+{
+	if (snap_overlay_tree) {
+		wlr_scene_node_destroy(&snap_overlay_tree->node);
+		snap_overlay_tree = NULL;
+		snap_overlay_border = NULL;
+		snap_overlay_bg = NULL;
+	}
+	active_snap_type = SNAP_NONE;
+	active_snap_target = NULL;
+}
+
+static void
+update_snap_overlay(struct wlr_box box, SnapTargetType type)
+{
+	const float border_center[4] = {0.85f, 0.20f, 0.20f, 0.75f};
+	const float bg_center[4]     = {0.40f, 0.05f, 0.05f, 0.50f};
+	const float border_edge[4]   = {0.75f, 0.15f, 0.15f, 0.70f};
+	const float bg_edge[4]       = {0.50f, 0.05f, 0.05f, 0.50f};
+
+	const float *b_color = (type == SNAP_CENTER) ? border_center : border_edge;
+	const float *f_color = (type == SNAP_CENTER) ? bg_center : bg_edge;
+	int bw = 2;
+
+	if (box.width <= 0 || box.height <= 0) {
+		destroy_snap_overlay();
+		return;
+	}
+
+	if (!snap_overlay_tree) {
+		snap_overlay_tree = wlr_scene_tree_create(layers[LyrOverlay]);
+		if (!snap_overlay_tree)
+			return;
+
+		snap_overlay_border = wlr_scene_rect_create(snap_overlay_tree, box.width, box.height, b_color);
+		snap_overlay_bg = wlr_scene_rect_create(snap_overlay_tree, MAX(1, box.width - 2 * bw), MAX(1, box.height - 2 * bw), f_color);
+		if (snap_overlay_bg)
+			wlr_scene_node_set_position(&snap_overlay_bg->node, bw, bw);
+	} else {
+		if (snap_overlay_border) {
+			wlr_scene_rect_set_size(snap_overlay_border, box.width, box.height);
+			wlr_scene_rect_set_color(snap_overlay_border, b_color);
+		}
+		if (snap_overlay_bg) {
+			wlr_scene_rect_set_size(snap_overlay_bg, MAX(1, box.width - 2 * bw), MAX(1, box.height - 2 * bw));
+			wlr_scene_rect_set_color(snap_overlay_bg, f_color);
+			wlr_scene_node_set_position(&snap_overlay_bg->node, bw, bw);
+		}
+	}
+
+	wlr_scene_node_set_position(&snap_overlay_tree->node, box.x, box.y);
+	wlr_scene_node_set_enabled(&snap_overlay_tree->node, true);
+	wlr_scene_node_raise_to_top(&snap_overlay_tree->node);
+}
 
 void
 axisnotify(struct wl_listener *listener, void *data)
@@ -93,6 +164,7 @@ buttonpress(struct wl_listener *listener, void *data)
 		/* TODO: should reset to the pointer focus's current setcursor */
 		if (!locked && cursor_mode != CurNormal && cursor_mode != CurPressed) {
 			int was_resize = (cursor_mode == CurResize);
+			int was_move = (cursor_mode == CurMove);
 			wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
 			cursor_mode = CurNormal;
 			/* Drop the window off on its new monitor */
@@ -104,79 +176,85 @@ buttonpress(struct wl_listener *listener, void *data)
 					selmon = m;
 					setmon(grabc, selmon);
 				}
-				if (grabc_was_tiled) {
-					int old_w = grabc_start_geom.width;
-					int old_h = grabc_start_geom.height;
-					int new_w = grabc->geom.width;
-					int new_h = grabc->geom.height;
+				if (was_move && active_snap_target && active_snap_type != SNAP_NONE) {
+					Client *at = active_snap_target;
+					Workspace *ws = grabc->mon ? grabc->mon->active_workspace : selmon->active_workspace;
 
-					Client *tc, *at = NULL;
-					double min_dist = 1e9;
-					wl_list_for_each(tc, &clients, link) {
-						double dx = 0, dy = 0, dist;
-						if (!VISIBLEON(tc, selmon) || tc->isfloating || tc->isfullscreen || tc == grabc)
-							continue;
-						if (cursor->x < tc->geom.x)
-							dx = tc->geom.x - cursor->x;
-						else if (cursor->x > tc->geom.x + tc->geom.width)
-							dx = cursor->x - (tc->geom.x + tc->geom.width);
-
-						if (cursor->y < tc->geom.y)
-							dy = tc->geom.y - cursor->y;
-						else if (cursor->y > tc->geom.y + tc->geom.height)
-							dy = cursor->y - (tc->geom.y + tc->geom.height);
-
-						dist = dx * dx + dy * dy;
-						if (dist < min_dist) {
-							min_dist = dist;
-							at = tc;
+					if (active_snap_type == SNAP_CENTER) {
+						/* Center Zone: SWAP windows */
+						if (grabc->node && at->node) {
+							tree_swap_nodes(grabc->node, at->node);
 						}
-					}
-					if (at && at->geom.width > 0 && at->geom.height > 0) {
-						double norm_x = (cursor->x - at->geom.x) / (double)at->geom.width - 0.5;
-						double norm_y = (cursor->y - at->geom.y) / (double)at->geom.height - 0.5;
-						int dir;
-						int before;
-						Workspace *ws;
+						/* Re-order client list to reflect swap */
+						wl_list_remove(&grabc->link);
+						wl_list_insert(&at->link, &grabc->link);
+					} else {
+						/* Edge Zones: SPLIT/INSERT window */
+						int dir = WLR_DIRECTION_RIGHT;
+						int before = 0;
 
-						if (fabs(norm_x) > fabs(norm_y))
-							dir = (norm_x < 0) ? WLR_DIRECTION_LEFT : WLR_DIRECTION_RIGHT;
-						else
-							dir = (norm_y < 0) ? WLR_DIRECTION_UP : WLR_DIRECTION_DOWN;
+						switch (active_snap_type) {
+						case SNAP_LEFT:
+							dir = WLR_DIRECTION_LEFT;
+							before = 1;
+							break;
+						case SNAP_RIGHT:
+							dir = WLR_DIRECTION_RIGHT;
+							before = 0;
+							break;
+						case SNAP_TOP:
+							dir = WLR_DIRECTION_UP;
+							before = 1;
+							break;
+						case SNAP_BOTTOM:
+							dir = WLR_DIRECTION_DOWN;
+							before = 0;
+							break;
+						default:
+							break;
+						}
 
-						before = (dir == WLR_DIRECTION_LEFT || dir == WLR_DIRECTION_UP);
 						wl_list_remove(&grabc->link);
 						if (before)
 							wl_list_insert(at->link.prev, &grabc->link);
 						else
 							wl_list_insert(&at->link, &grabc->link);
 
-						ws = grabc->mon ? grabc->mon->active_workspace : selmon->active_workspace;
 						if (ws)
 							node_insert_client_at(ws, grabc, at, dir);
 					}
 					setfloating(grabc, 0);
+					arrange(selmon);
+				} else if (grabc_was_tiled) {
+					setfloating(grabc, 0);
+					arrange(selmon);
+				}
 
-					if (was_resize && grabc->node) {
-						float scale_w = (old_w > 0) ? (float)new_w / (float)old_w : 1.0f;
-						float scale_h = (old_h > 0) ? (float)new_h / (float)old_h : 1.0f;
+				if (was_resize && grabc_was_tiled && grabc->node) {
+					int old_w = grabc_start_geom.width;
+					int old_h = grabc_start_geom.height;
+					int new_w = grabc->geom.width;
+					int new_h = grabc->geom.height;
 
-						if (fabsf(scale_w - 1.0f) > 0.01f && scale_w > 0.05f && scale_w < 20.0f)
-							grabc->node->ratio_h = clamp_ratio(grabc->node->ratio_h * scale_w);
+					float scale_w = (old_w > 0) ? (float)new_w / (float)old_w : 1.0f;
+					float scale_h = (old_h > 0) ? (float)new_h / (float)old_h : 1.0f;
 
-						if (fabsf(scale_h - 1.0f) > 0.01f && scale_h > 0.05f && scale_h < 20.0f)
-							grabc->node->ratio_v = clamp_ratio(grabc->node->ratio_v * scale_h);
+					if (fabsf(scale_w - 1.0f) > 0.01f && scale_w > 0.05f && scale_w < 20.0f)
+						grabc->node->ratio_h = clamp_ratio(grabc->node->ratio_h * scale_w);
 
-						if (selmon && (selmon->lt[selmon->sellt]->arrange == tile || selmon->lt[selmon->sellt]->arrange == master_stack)) {
-							if (fabsf(scale_w - 1.0f) > 0.01f && selmon->w.width > 0) {
-								float delta_mfact = (float)(new_w - old_w) / (float)selmon->w.width;
-								selmon->mfact = MIN(0.9f, MAX(0.1f, selmon->mfact + delta_mfact));
-							}
+					if (fabsf(scale_h - 1.0f) > 0.01f && scale_h > 0.05f && scale_h < 20.0f)
+						grabc->node->ratio_v = clamp_ratio(grabc->node->ratio_v * scale_h);
+
+					if (selmon && (selmon->lt[selmon->sellt]->arrange == tile || selmon->lt[selmon->sellt]->arrange == master_stack)) {
+						if (fabsf(scale_w - 1.0f) > 0.01f && selmon->w.width > 0) {
+							float delta_mfact = (float)(new_w - old_w) / (float)selmon->w.width;
+							selmon->mfact = MIN(0.9f, MAX(0.1f, selmon->mfact + delta_mfact));
 						}
-						arrange(selmon);
 					}
+					arrange(selmon);
 				}
 			}
+			destroy_snap_overlay();
 			grabc = NULL;
 			in_pointer_focus = 0;
 			return;
@@ -327,9 +405,92 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 		/* Move the grabbed client to the new position. */
 		resize(grabc, (struct wlr_box){.x = (int)round(cursor->x) - grabcx, .y = (int)round(cursor->y) - grabcy,
 			.width = grabc->geom.width, .height = grabc->geom.height}, 1);
+
+		/* Find nearest tileable client target for snapping feedback */
+		Client *tc, *at = NULL;
+		double min_dist = 1e9;
+
+		wl_list_for_each(tc, &clients, link) {
+			double dx = 0, dy = 0, dist;
+			if (!client_is_tileable(tc) || tc == grabc)
+				continue;
+			if (cursor->x < tc->geom.x)
+				dx = tc->geom.x - cursor->x;
+			else if (cursor->x > tc->geom.x + tc->geom.width)
+				dx = cursor->x - (tc->geom.x + tc->geom.width);
+
+			if (cursor->y < tc->geom.y)
+				dy = tc->geom.y - cursor->y;
+			else if (cursor->y > tc->geom.y + tc->geom.height)
+				dy = cursor->y - (tc->geom.y + tc->geom.height);
+
+			dist = dx * dx + dy * dy;
+			if (dist < min_dist) {
+				min_dist = dist;
+				at = tc;
+			}
+		}
+
+		if (at && at->geom.width > 0 && at->geom.height > 0) {
+			double norm_x = (cursor->x - at->geom.x) / (double)at->geom.width - 0.5;
+			double norm_y = (cursor->y - at->geom.y) / (double)at->geom.height - 0.5;
+			struct wlr_box snap_box;
+
+			if (fabs(norm_x) < 0.25 && fabs(norm_y) < 0.25) {
+				active_snap_type = SNAP_CENTER;
+				active_snap_target = at;
+				snap_box = at->geom;
+			} else {
+				active_snap_target = at;
+				if (fabs(norm_x) > fabs(norm_y)) {
+					int edge_w = MAX(1, (int)round(at->geom.width * 0.20));
+					if (norm_x < 0) {
+						active_snap_type = SNAP_LEFT;
+						snap_box = (struct wlr_box){
+							.x = at->geom.x,
+							.y = at->geom.y,
+							.width = edge_w,
+							.height = at->geom.height
+						};
+					} else {
+						active_snap_type = SNAP_RIGHT;
+						snap_box = (struct wlr_box){
+							.x = at->geom.x + at->geom.width - edge_w,
+							.y = at->geom.y,
+							.width = edge_w,
+							.height = at->geom.height
+						};
+					}
+				} else {
+					int edge_h = MAX(1, (int)round(at->geom.height * 0.20));
+					if (norm_y < 0) {
+						active_snap_type = SNAP_TOP;
+						snap_box = (struct wlr_box){
+							.x = at->geom.x,
+							.y = at->geom.y,
+							.width = at->geom.width,
+							.height = edge_h
+						};
+					} else {
+						active_snap_type = SNAP_BOTTOM;
+						snap_box = (struct wlr_box){
+							.x = at->geom.x,
+							.y = at->geom.y + at->geom.height - edge_h,
+							.width = at->geom.width,
+							.height = edge_h
+						};
+					}
+				}
+			}
+			update_snap_overlay(snap_box, active_snap_type);
+		} else {
+			destroy_snap_overlay();
+		}
+
 		in_pointer_focus = 0;
 		return;
 	} else if (cursor_mode == CurResize) {
+		destroy_snap_overlay();
 		resize(grabc, (struct wlr_box){.x = grabc->geom.x, .y = grabc->geom.y,
 			.width = (int)round(cursor->x) - grabc->geom.x, .height = (int)round(cursor->y) - grabc->geom.y}, 1);
 		in_pointer_focus = 0;

@@ -68,29 +68,43 @@ bsp_layout(Monitor *m)
 	tree_layout(m);
 }
 
+static inline int
+get_layout_leaves(Monitor *m, Client **leaves, int max)
+{
+	if (!m || !m->active_workspace || !m->active_workspace->root)
+		return 0;
+	return node_collect_leaves(m->active_workspace->root, leaves, max);
+}
+
+static inline float
+client_get_ratio(const Client *c, int is_horiz)
+{
+	float r;
+	if (!c || !c->node)
+		return 1.0f;
+	r = is_horiz ? c->node->ratio_h : c->node->ratio_v;
+	return (r > 0.05f) ? r : 1.0f;
+}
+
 static float
 calculate_ratio_factor(Client **leaves, int count, int is_horiz)
 {
 	float r1, r2 = 0.0f;
 	int i;
 
-	r1 = (leaves[0]->node && (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) > 0.05f)
-		? (is_horiz ? leaves[0]->node->ratio_h : leaves[0]->node->ratio_v) : 1.0f;
-	for (i = 1; i < count; i++) {
-		float r = (leaves[i]->node && (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) > 0.05f)
-			? (is_horiz ? leaves[i]->node->ratio_h : leaves[i]->node->ratio_v) : 1.0f;
-		r2 += r;
-	}
+	r1 = client_get_ratio(leaves[0], is_horiz);
+	for (i = 1; i < count; i++)
+		r2 += client_get_ratio(leaves[i], is_horiz);
 	r2 /= (float)(count - 1);
 
 	return r1 / (r1 + r2);
 }
 
 static void
-dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth)
+fibonacci_recursive(Client **leaves, int count, struct wlr_box box, int depth, int is_dwindle)
 {
 	int g = (int)gappx;
-	int is_horiz;
+	int mode, is_horiz;
 	float ratio_factor;
 	struct wlr_box b1, b2, gbox;
 
@@ -111,80 +125,12 @@ dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 	b1 = box;
 	b2 = box;
 
-	is_horiz = (depth % 2 == 0);
+	mode = is_dwindle ? (depth % 2) : (depth % 4);
+	is_horiz = (mode % 2 == 0);
 	ratio_factor = calculate_ratio_factor(leaves, count, is_horiz);
 
-	if (is_horiz) {
-		int w = (int)roundf((float)box.width * ratio_factor);
-		w = MAX(1, MIN(box.width - 1, w));
-		b1.width = w;
-		b2.x = box.x + w;
-		b2.width = box.width - w;
-	} else {
-		int h = (int)roundf((float)box.height * ratio_factor);
-		h = MAX(1, MIN(box.height - 1, h));
-		b1.height = h;
-		b2.y = box.y + h;
-		b2.height = box.height - h;
-	}
-
-	gbox = (struct wlr_box){
-		.x = b1.x + g,
-		.y = b1.y + g,
-		.width = MAX(1, b1.width - 2 * g),
-		.height = MAX(1, b1.height - 2 * g)
-	};
-	resize(leaves[0], gbox, 0);
-
-	dwindle_recursive(leaves + 1, count - 1, b2, depth + 1);
-}
-
-void
-dwindle(Monitor *m)
-{
-	Client *leaves[128];
-	int n;
-
-	if (!m || !m->active_workspace || !m->active_workspace->root)
-		return;
-
-	n = node_collect_leaves(m->active_workspace->root, leaves, 128);
-	if (n == 0)
-		return;
-
-	dwindle_recursive(leaves, n, m->w, 0);
-}
-
-static void
-spiral_recursive(Client **leaves, int count, struct wlr_box box, int depth)
-{
-	int g = (int)gappx;
-	int is_horiz;
-	float ratio_factor;
-	struct wlr_box b1, b2, gbox;
-
-	if (count <= 0)
-		return;
-
-	if (count == 1) {
-		gbox = (struct wlr_box){
-			.x = box.x + g,
-			.y = box.y + g,
-			.width = MAX(1, box.width - 2 * g),
-			.height = MAX(1, box.height - 2 * g)
-		};
-		resize(leaves[0], gbox, 0);
-		return;
-	}
-
-	b1 = box;
-	b2 = box;
-
-	is_horiz = (depth % 2 == 0);
-	ratio_factor = calculate_ratio_factor(leaves, count, is_horiz);
-
-	switch (depth % 4) {
-	case 0:
+	switch (mode) {
+	case 0: /* Horizontal split, right box receives remainder */
 		{
 			int w = (int)roundf((float)box.width * ratio_factor);
 			w = MAX(1, MIN(box.width - 1, w));
@@ -193,7 +139,7 @@ spiral_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 			b2.width = box.width - w;
 		}
 		break;
-	case 1:
+	case 1: /* Vertical split, bottom box receives remainder */
 		{
 			int h = (int)roundf((float)box.height * ratio_factor);
 			h = MAX(1, MIN(box.height - 1, h));
@@ -202,7 +148,7 @@ spiral_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 			b2.height = box.height - h;
 		}
 		break;
-	case 2:
+	case 2: /* Horizontal split, left box receives remainder */
 		{
 			int w = (int)roundf((float)box.width * (1.0f - ratio_factor));
 			w = MAX(1, MIN(box.width - 1, w));
@@ -211,7 +157,7 @@ spiral_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 			b2.width = w;
 		}
 		break;
-	case 3:
+	case 3: /* Vertical split, top box receives remainder */
 		{
 			int h = (int)roundf((float)box.height * (1.0f - ratio_factor));
 			h = MAX(1, MIN(box.height - 1, h));
@@ -230,12 +176,22 @@ spiral_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 	};
 	resize(leaves[0], gbox, 0);
 
-	spiral_recursive(leaves + 1, count - 1, b2, depth + 1);
+	fibonacci_recursive(leaves + 1, count - 1, b2, depth + 1, is_dwindle);
+}
+
+void
+dwindle(Monitor *m)
+{
+	Client *leaves[128];
+	int n = get_layout_leaves(m, leaves, 128);
+	if (n > 0)
+		fibonacci_recursive(leaves, n, m->w, 0, 1);
 }
 
 void
 fibonacci(Monitor *m, int s)
 {
+	(void)s;
 	spiral(m);
 }
 
@@ -243,16 +199,9 @@ void
 spiral(Monitor *m)
 {
 	Client *leaves[128];
-	int n;
-
-	if (!m || !m->active_workspace || !m->active_workspace->root)
-		return;
-
-	n = node_collect_leaves(m->active_workspace->root, leaves, 128);
-	if (n == 0)
-		return;
-
-	spiral_recursive(leaves, n, m->w, 0);
+	int n = get_layout_leaves(m, leaves, 128);
+	if (n > 0)
+		fibonacci_recursive(leaves, n, m->w, 0, 0);
 }
 
 void
@@ -265,15 +214,12 @@ columns(Monitor *m)
 	float total_ratio = 0.0f;
 	int avail_w;
 
-	if (!m || !m->active_workspace || !m->active_workspace->root)
-		return;
-
-	n = node_collect_leaves(m->active_workspace->root, leaves, 128);
+	n = get_layout_leaves(m, leaves, 128);
 	if (n == 0)
 		return;
 
 	for (i = 0; i < n; i++)
-		total_ratio += (leaves[i]->node && leaves[i]->node->ratio_h > 0.05f) ? leaves[i]->node->ratio_h : 1.0f;
+		total_ratio += client_get_ratio(leaves[i], 1);
 	if (total_ratio <= 0.0f)
 		total_ratio = (float)n;
 
@@ -281,7 +227,7 @@ columns(Monitor *m)
 	avail_w = m->w.width - g * (n + 1);
 
 	for (i = 0; i < n; i++) {
-		float r = (leaves[i]->node && leaves[i]->node->ratio_h > 0.05f) ? leaves[i]->node->ratio_h : 1.0f;
+		float r = client_get_ratio(leaves[i], 1);
 		if (i == n - 1)
 			w = m->w.x + m->w.width - g - x;
 		else
@@ -308,17 +254,14 @@ tile(Monitor *m)
 {
 	Client *leaves[128];
 	unsigned int mw, my, ty;
-	int i, n = 0, nm, ns;
+	int i, n, nm, ns;
 	int g = (int)gappx;
 	int mx, mw_final, sx, sw_final;
 	Client *c;
 	float total_m_ratio = 0.0f, total_s_ratio = 0.0f;
 	int avail_m_h, avail_s_h;
 
-	if (!m || !m->active_workspace || !m->active_workspace->root)
-		return;
-
-	n = node_collect_leaves(m->active_workspace->root, leaves, 128);
+	n = get_layout_leaves(m, leaves, 128);
 	if (n == 0)
 		return;
 
@@ -346,7 +289,7 @@ tile(Monitor *m)
 	}
 
 	for (i = 0; i < n; i++) {
-		float r = (leaves[i]->node && leaves[i]->node->ratio_v > 0.05f) ? leaves[i]->node->ratio_v : 1.0f;
+		float r = client_get_ratio(leaves[i], 0);
 		if (i < nm)
 			total_m_ratio += r;
 		else
@@ -362,7 +305,7 @@ tile(Monitor *m)
 	for (i = 0; i < n; i++) {
 		float r;
 		c = leaves[i];
-		r = (c->node && c->node->ratio_v > 0.05f) ? c->node->ratio_v : 1.0f;
+		r = client_get_ratio(c, 0);
 		if (i < m->nmaster) {
 			int h;
 			if (i == nm - 1)
@@ -394,10 +337,7 @@ monocle(Monitor *m)
 	int g = (int)gappx;
 	struct wlr_box gbox;
 
-	if (!m || !m->active_workspace || !m->active_workspace->root)
-		return;
-
-	n = node_collect_leaves(m->active_workspace->root, leaves, 128);
+	n = get_layout_leaves(m, leaves, 128);
 	gbox = (struct wlr_box){
 		.x = m->w.x + g,
 		.y = m->w.y + g,
@@ -534,6 +474,7 @@ static const uint8_t font5x7[26][7] = {
 	{0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}, /* T */
 	{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}, /* U */
 	{0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04}, /* V */
+	{0x11, 0x11, 0x11, 0x15, 0x15, 0x1B, 0x11}, /* W */
 	{0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11}, /* X */
 	{0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04}, /* Y */
 	{0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}, /* Z */

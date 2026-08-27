@@ -400,3 +400,10 @@ client_wants_fullscreen(Client *c)
 #endif
 	return c->surface.xdg->toplevel->requested.fullscreen;
 }
+
+/* Returns non-zero if the client is valid, visible on its monitor, non-floating, and non-fullscreen */
+static inline int
+client_is_tileable(const Client *c)
+{
+	return c && VISIBLEON(c, c->mon) && !c->isfloating && !c->isfullscreen;
+}

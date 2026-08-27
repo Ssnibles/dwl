@@ -163,8 +163,8 @@ node_insert_client_at(Workspace *ws, Client *c, Client *at, int dir)
 		break;
 	}
 
-	if (target_parent->children.next != &target_parent->children &&
-	    target_parent->children.next == target_parent->children.prev) {
+	/* Automatically adapt split orientation if container has only one child */
+	if (node_has_single_child(target_parent)) {
 		target_parent->split_type = desired_split;
 	}
 
@@ -200,10 +200,11 @@ node_collapse_container(Node *container)
 {
 	Node *only_child, *gparent;
 
-	if (!container || container->type != NODE_CONTAINER || container->type == NODE_ROOT)
+	/* Collapse container if it contains only 1 child, hoisting child to grandparent */
+	if (container->type != NODE_CONTAINER || container->type == NODE_ROOT)
 		return;
 
-	if (wl_list_empty(&container->children) || container->children.next != container->children.prev)
+	if (!node_has_single_child(container))
 		return;
 
 	only_child = wl_container_of(container->children.next, only_child, link);
@@ -243,16 +244,14 @@ node_remove(Node *node)
 	parent = node->parent;
 
 	/* Safely update workspace focused_node if it points to node or inside node's subtree */
-	if (ws) {
-		if (ws->focused_node == node || node_is_ancestor(node, ws->focused_node)) {
-			Node *sibling = NULL;
-			if (node->link.next != &parent->children)
-				sibling = wl_container_of(node->link.next, sibling, link);
-			else if (node->link.prev != &parent->children)
-				sibling = wl_container_of(node->link.prev, sibling, link);
+	if (ws && node_is_ancestor(node, ws->focused_node)) {
+		Node *sibling = NULL;
+		if (parent && node->link.next != &parent->children)
+			sibling = wl_container_of(node->link.next, sibling, link);
+		else if (parent && node->link.prev != &parent->children)
+			sibling = wl_container_of(node->link.prev, sibling, link);
 
-			ws->focused_node = sibling ? sibling : (parent ? parent : ws->root);
-		}
+		ws->focused_node = sibling ? sibling : (parent ? parent : ws->root);
 	}
 
 	wl_list_remove(&node->link);
@@ -276,6 +275,13 @@ node_remove(Node *node)
 	}
 }
 
+static inline float
+node_get_weight(const Node *child, SplitType split)
+{
+	float r = (split == SPLIT_HORIZONTAL) ? child->ratio_h : child->ratio_v;
+	return (r > 0.05f) ? r : 1.0f;
+}
+
 Node *
 node_find_client(Node *root, Client *c)
 {
@@ -297,12 +303,8 @@ node_count_leaves(Node *node)
 	if (!node)
 		return 0;
 
-	if (node->type == NODE_LEAF) {
-		Client *c = node->client;
-		if (c && VISIBLEON(c, c->mon) && !c->isfloating && !c->isfullscreen)
-			return 1;
-		return 0;
-	}
+	if (node->type == NODE_LEAF)
+		return client_is_tileable(node->client) ? 1 : 0;
 
 	wl_list_for_each(child, &node->children, link) {
 		count += node_count_leaves(child);
@@ -316,12 +318,12 @@ node_collect_leaves(Node *node, Client **array, int max)
 	Node *child;
 	int count = 0;
 
-	if (!node || count >= max)
+	if (!node || max <= 0)
 		return 0;
 
 	if (node->type == NODE_LEAF) {
 		Client *c = node->client;
-		if (c && VISIBLEON(c, c->mon) && !c->isfloating && !c->isfullscreen) {
+		if (client_is_tileable(c)) {
 			array[0] = c;
 			return 1;
 		}
@@ -353,7 +355,7 @@ node_arrange_recursive(Node *node, struct wlr_box box)
 
 	if (node->type == NODE_LEAF) {
 		Client *c = node->client;
-		if (c && c->mon && VISIBLEON(c, c->mon) && !c->isfloating && !c->isfullscreen) {
+		if (client_is_tileable(c)) {
 			struct wlr_box gbox = {
 				.x = box.x + g,
 				.y = box.y + g,
@@ -366,10 +368,8 @@ node_arrange_recursive(Node *node, struct wlr_box box)
 	}
 
 	wl_list_for_each(child, &node->children, link) {
-		float r;
 		child_count++;
-		r = (node->split_type == SPLIT_HORIZONTAL) ? child->ratio_h : child->ratio_v;
-		total_ratio += (r > 0.05f) ? r : 1.0f;
+		total_ratio += node_get_weight(child, node->split_type);
 	}
 
 	if (child_count == 0)
@@ -380,8 +380,7 @@ node_arrange_recursive(Node *node, struct wlr_box box)
 
 	wl_list_for_each(child, &node->children, link) {
 		struct wlr_box child_box = box;
-		float r = (node->split_type == SPLIT_HORIZONTAL) ? child->ratio_h : child->ratio_v;
-		float child_weight = (r > 0.05f) ? r : 1.0f;
+		float child_weight = node_get_weight(child, node->split_type);
 
 		if (node->split_type == SPLIT_HORIZONTAL) {
 			int w = (int)roundf((float)box.width * (child_weight / total_ratio));

@@ -584,6 +584,13 @@ destroynotify(struct wl_listener *listener, void *data)
 {
 	/* Called when the xdg_toplevel is destroyed. */
 	Client *c = wl_container_of(listener, c, destroy);
+	Monitor *m_iter;
+
+	wl_list_for_each(m_iter, &mons, link) {
+		if (m_iter->overview_prev_client == c)
+			m_iter->overview_prev_client = NULL;
+	}
+
 	wl_list_remove(&c->destroy.link);
 	wl_list_remove(&c->set_title.link);
 	wl_list_remove(&c->fullscreen.link);

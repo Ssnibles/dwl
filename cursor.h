@@ -23,6 +23,7 @@ void motionrelative(struct wl_listener *listener, void *data);
 void moveresize(const Arg *arg);
 void setcursor(struct wl_listener *listener, void *data);
 void setcursorshape(struct wl_listener *listener, void *data);
+void destroy_snap_overlay(void);
 void warptocenter(Client *c);
 
 #endif /* CURSOR_H */

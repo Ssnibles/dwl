@@ -44,8 +44,12 @@ workspace_destroy(Workspace *ws)
 	if (!ws)
 		return;
 
-	if (ws->mon && ws->mon->active_workspace == ws)
-		ws->mon->active_workspace = NULL;
+	if (ws->mon) {
+		if (ws->mon->active_workspace == ws)
+			ws->mon->active_workspace = NULL;
+		if (ws->mon->overview_prev_ws == ws)
+			ws->mon->overview_prev_ws = NULL;
+	}
 
 	wl_list_remove(&ws->link);
 	wl_list_init(&ws->link);
@@ -71,6 +75,7 @@ workspace_get_by_id(Monitor *m, int id)
 	return NULL;
 }
 
+/* Switch active workspace on a monitor and restore keyboard focus */
 void
 workspace_switch(Workspace *ws)
 {
@@ -91,6 +96,7 @@ workspace_switch(Workspace *ws)
 	printstatus();
 }
 
+/* Move client between workspaces, updating N-ary tree nodes and surface visibility */
 void
 client_move_to_workspace(Client *c, Workspace *ws)
 {

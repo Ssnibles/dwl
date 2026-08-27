@@ -26,6 +26,10 @@ void clearlabeloverlays(Monitor *m);
 void destroylabeloverlay(Client *c);
 void toggleoverview(const Arg *arg);
 void updatelabeloverlays(Monitor *m);
+/*
+ * Evaluates whether relative offset (dx, dy) matches specified spatial direction enum (left/right/up/down).
+ * Returns non-zero if matching, and calculates weighted euclidean distance squared (penalizing off-axis distance by 3x).
+ */
 static inline int
 spatial_direction_match(double dx, double dy, int dir, double *dist)
 {

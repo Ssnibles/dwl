@@ -51,6 +51,13 @@ clamp_ratio(float r)
 	return r;
 }
 
+/* Returns non-zero if node has children list containing exactly one node */
+static inline int
+node_has_single_child(const Node *node)
+{
+	return node && !wl_list_empty(&node->children) && (node->children.next == node->children.prev);
+}
+
 /* N-ary Tree Lifecycle & Management */
 Node *node_create(NodeType type, struct Workspace *ws);
 void node_insert_child(Node *parent, Node *child);
