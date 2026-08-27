@@ -33,6 +33,7 @@ typedef enum {
 
 static int grabc_was_tiled;
 static struct wlr_box grabc_start_geom;
+static uint32_t grabc_edges;
 
 static struct wlr_scene_tree *snap_overlay_tree = NULL;
 static struct wlr_scene_rect *snap_overlay_border = NULL;
@@ -524,9 +525,50 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 		in_pointer_focus = 0;
 		return;
 	} else if (cursor_mode == CurResize) {
+		int min_w = grabc->isfloating ? (int)min_width + 2 * (int)grabc->bw : 2 * (int)grabc->bw + 1;
+		int min_h = grabc->isfloating ? (int)min_height + 2 * (int)grabc->bw : 2 * (int)grabc->bw + 1;
+		int fixed_left = grabc_start_geom.x;
+		int fixed_right = grabc_start_geom.x + grabc_start_geom.width;
+		int fixed_top = grabc_start_geom.y;
+		int fixed_bottom = grabc_start_geom.y + grabc_start_geom.height;
+		int new_x = grabc->geom.x;
+		int new_y = grabc->geom.y;
+		int new_w = grabc->geom.width;
+		int new_h = grabc->geom.height;
+
 		destroy_snap_overlay();
-		resize(grabc, (struct wlr_box){.x = grabc->geom.x, .y = grabc->geom.y,
-			.width = (int)round(cursor->x) - grabc->geom.x, .height = (int)round(cursor->y) - grabc->geom.y}, 1);
+
+		if (grabc_edges & WLR_EDGE_LEFT) {
+			new_x = (int)round(cursor->x) - grabcx;
+			if (fixed_right - new_x < min_w)
+				new_x = fixed_right - min_w;
+			new_w = fixed_right - new_x;
+		} else if (grabc_edges & WLR_EDGE_RIGHT) {
+			new_x = fixed_left;
+			new_w = (int)round(cursor->x) - fixed_left - grabcx;
+			if (new_w < min_w)
+				new_w = min_w;
+		} else {
+			new_x = fixed_left;
+			new_w = grabc_start_geom.width;
+		}
+
+		if (grabc_edges & WLR_EDGE_TOP) {
+			new_y = (int)round(cursor->y) - grabcy;
+			if (fixed_bottom - new_y < min_h)
+				new_y = fixed_bottom - min_h;
+			new_h = fixed_bottom - new_y;
+		} else if (grabc_edges & WLR_EDGE_BOTTOM) {
+			new_y = fixed_top;
+			new_h = (int)round(cursor->y) - fixed_top - grabcy;
+			if (new_h < min_h)
+				new_h = min_h;
+		} else {
+			new_y = fixed_top;
+			new_h = grabc_start_geom.height;
+		}
+
+		resize(grabc, (struct wlr_box){.x = new_x, .y = new_y, .width = new_w, .height = new_h}, 1);
 		in_pointer_focus = 0;
 		return;
 	}
@@ -562,6 +604,9 @@ motionrelative(struct wl_listener *listener, void *data)
 void
 moveresize(const Arg *arg)
 {
+	double norm_x, norm_y, d_left, d_right, d_top, d_bottom;
+	const char *cursor_icon;
+
 	if (cursor_mode != CurNormal && cursor_mode != CurPressed)
 		return;
 	xytonode(cursor->x, cursor->y, NULL, &grabc, NULL, NULL, NULL);
@@ -580,12 +625,80 @@ moveresize(const Arg *arg)
 		wlr_cursor_set_xcursor(cursor, cursor_mgr, "all-scroll");
 		break;
 	case CurResize:
-		/* Doesn't work for X11 output - the next absolute motion event
-		 * returns the cursor to where it started */
-		wlr_cursor_warp_closest(cursor, NULL,
-				grabc->geom.x + grabc->geom.width,
-				grabc->geom.y + grabc->geom.height);
-		wlr_cursor_set_xcursor(cursor, cursor_mgr, "se-resize");
+		norm_x = (grabc->geom.width > 0) ? (cursor->x - grabc->geom.x) / (double)grabc->geom.width : 0.5;
+		norm_y = (grabc->geom.height > 0) ? (cursor->y - grabc->geom.y) / (double)grabc->geom.height : 0.5;
+		cursor_icon = "se-resize";
+
+		grabc_edges = WLR_EDGE_NONE;
+		if (norm_x < 0.35)
+			grabc_edges |= WLR_EDGE_LEFT;
+		else if (norm_x > 0.65)
+			grabc_edges |= WLR_EDGE_RIGHT;
+
+		if (norm_y < 0.35)
+			grabc_edges |= WLR_EDGE_TOP;
+		else if (norm_y > 0.65)
+			grabc_edges |= WLR_EDGE_BOTTOM;
+
+		if (grabc_edges == WLR_EDGE_NONE) {
+			d_left = fabs(cursor->x - grabc->geom.x);
+			d_right = fabs(cursor->x - (grabc->geom.x + grabc->geom.width));
+			d_top = fabs(cursor->y - grabc->geom.y);
+			d_bottom = fabs(cursor->y - (grabc->geom.y + grabc->geom.height));
+
+			if (d_left < d_right)
+				grabc_edges |= WLR_EDGE_LEFT;
+			else
+				grabc_edges |= WLR_EDGE_RIGHT;
+
+			if (d_top < d_bottom)
+				grabc_edges |= WLR_EDGE_TOP;
+			else
+				grabc_edges |= WLR_EDGE_BOTTOM;
+		}
+
+		if (grabc_edges & WLR_EDGE_LEFT)
+			grabcx = (int)round(cursor->x) - grabc->geom.x;
+		else if (grabc_edges & WLR_EDGE_RIGHT)
+			grabcx = (int)round(cursor->x) - (grabc->geom.x + grabc->geom.width);
+		else
+			grabcx = 0;
+
+		if (grabc_edges & WLR_EDGE_TOP)
+			grabcy = (int)round(cursor->y) - grabc->geom.y;
+		else if (grabc_edges & WLR_EDGE_BOTTOM)
+			grabcy = (int)round(cursor->y) - (grabc->geom.y + grabc->geom.height);
+		else
+			grabcy = 0;
+
+		switch (grabc_edges) {
+		case WLR_EDGE_TOP:
+			cursor_icon = "n-resize";
+			break;
+		case WLR_EDGE_BOTTOM:
+			cursor_icon = "s-resize";
+			break;
+		case WLR_EDGE_LEFT:
+			cursor_icon = "w-resize";
+			break;
+		case WLR_EDGE_RIGHT:
+			cursor_icon = "e-resize";
+			break;
+		case WLR_EDGE_TOP | WLR_EDGE_LEFT:
+			cursor_icon = "nw-resize";
+			break;
+		case WLR_EDGE_TOP | WLR_EDGE_RIGHT:
+			cursor_icon = "ne-resize";
+			break;
+		case WLR_EDGE_BOTTOM | WLR_EDGE_LEFT:
+			cursor_icon = "sw-resize";
+			break;
+		case WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT:
+			cursor_icon = "se-resize";
+			break;
+		}
+
+		wlr_cursor_set_xcursor(cursor, cursor_mgr, cursor_icon);
 		break;
 	}
 }
