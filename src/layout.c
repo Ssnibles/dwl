@@ -210,12 +210,9 @@ fibonacci_recursive(Client **leaves, int count, struct wlr_box box, int depth, i
 static void
 dwindle_box(Monitor *m, Workspace *ws, struct wlr_box box)
 {
-	Client *leaves[128];
-	int n;
 	(void)m;
-	n = get_workspace_leaves(ws, leaves, 128);
-	if (n > 0)
-		fibonacci_recursive(leaves, n, box, 0, 1);
+	if (ws && ws->root)
+		node_arrange_recursive(ws->root, box);
 }
 
 static void

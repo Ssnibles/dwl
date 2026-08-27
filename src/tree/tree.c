@@ -100,13 +100,15 @@ node_insert_client(Workspace *ws, Client *c)
 	if (ws->next_split != 0) {
 		desired_split = ws->next_split;
 		ws->next_split = 0;
+	} else if (focus_ref->type == NODE_LEAF && focus_ref->geom.width > 0 && focus_ref->geom.height > 0) {
+		desired_split = (focus_ref->geom.width >= focus_ref->geom.height) ? SPLIT_HORIZONTAL : SPLIT_VERTICAL;
 	} else if (target_parent->split_type == SPLIT_HORIZONTAL) {
 		desired_split = SPLIT_VERTICAL;
 	} else {
 		desired_split = SPLIT_HORIZONTAL;
 	}
 
-	if (target_parent->split_type != desired_split && focus_ref->type == NODE_LEAF) {
+	if (focus_ref->type == NODE_LEAF) {
 		Node *container = node_create(NODE_CONTAINER, ws);
 		container->split_type = desired_split;
 
@@ -646,8 +648,8 @@ tree_resize_dir(const Arg *arg)
 	if (lt && lt->arrange == monocle)
 		return;
 
-	/* 1. Handling tree_layout & bsp_layout */
-	if (lt && (lt->arrange == tree_layout || lt->arrange == bsp_layout)) {
+	/* 1. Handling tree_layout, bsp_layout & dwindle */
+	if (lt && (lt->arrange == tree_layout || lt->arrange == bsp_layout || lt->arrange == dwindle)) {
 		Node *curr, *parent = NULL;
 		Node *prev_sub = NULL, *next_sub = NULL;
 		target_node = NULL;
@@ -1092,8 +1094,8 @@ tree_mouse_resize_start(Client *c, uint32_t grabc_edges, double cursor_x, double
 		return;
 	}
 
-	/* C. Dwindle, Spiral, Fibonacci Layouts */
-	if (lt->arrange == dwindle || lt->arrange == spiral || lt->arrange == fibonacci) {
+	/* C. Spiral & Fibonacci Layouts */
+	if (lt->arrange == spiral || lt->arrange == fibonacci) {
 		if (idx >= 0 && n > 1) {
 			int is_dwindle = (lt->arrange == dwindle);
 			int start_d = (idx < n - 1) ? idx : (n - 2);
@@ -1303,8 +1305,8 @@ tree_mouse_resize(Client *c, double cursor_x, double cursor_y)
 		return;
 	}
 
-	/* 2. Dwindle, Spiral, Fibonacci Layouts */
-	if (lt->arrange == dwindle || lt->arrange == spiral || lt->arrange == fibonacci) {
+	/* 2. Spiral & Fibonacci Layouts */
+	if (lt->arrange == spiral || lt->arrange == fibonacci) {
 		float mon_w = (selmon->w.width > 0) ? (float)selmon->w.width : 1920.0f;
 		float mon_h = (selmon->w.height > 0) ? (float)selmon->w.height : 1080.0f;
 
