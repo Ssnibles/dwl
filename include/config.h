@@ -155,12 +155,13 @@ static const Key keys[] = {
 	{ MODKEY,                    XKB_KEY_minus,       tree_resize_active,  {.f = -0.15f} },
 
 	/* Tree Split Type & Equalization */
+	{ MODKEY,                    XKB_KEY_b,           tree_set_split_type, {.i = SPLIT_HORIZONTAL} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_B,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_v,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_V,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           tree_set_split_type, {.i = SPLIT_HORIZONTAL} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_B,           tree_set_split_type, {.i = SPLIT_HORIZONTAL} },
-	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_v,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
 	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_b,           tree_set_split_type, {.i = SPLIT_HORIZONTAL} },
+	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_v,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
 	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_e,           tree_equalize_active,  {0} },
 
 	/* Workspace Navigation */

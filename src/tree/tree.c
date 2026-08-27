@@ -69,6 +69,9 @@ node_insert_client(Workspace *ws, Client *c)
 {
 	Node *target_parent, *leaf, *focus_ref;
 	SplitType desired_split;
+	int explicit_split = 0;
+	const Layout *lt;
+	int is_dwindle = 0;
 
 	if (!ws || !ws->root || !c)
 		return NULL;
@@ -97,8 +100,12 @@ node_insert_client(Workspace *ws, Client *c)
 
 	target_parent = focus_ref->parent ? focus_ref->parent : ws->root;
 
+	lt = ws->layout ? ws->layout : (selmon ? selmon->lt[selmon->sellt] : NULL);
+	is_dwindle = (lt && lt->arrange == dwindle);
+
 	if (ws->next_split != 0) {
 		desired_split = ws->next_split;
+		explicit_split = 1;
 		ws->next_split = 0;
 	} else if (focus_ref->type == NODE_LEAF && focus_ref->geom.width > 0 && focus_ref->geom.height > 0) {
 		desired_split = (focus_ref->geom.width >= focus_ref->geom.height) ? SPLIT_HORIZONTAL : SPLIT_VERTICAL;
@@ -108,15 +115,26 @@ node_insert_client(Workspace *ws, Client *c)
 		desired_split = SPLIT_HORIZONTAL;
 	}
 
-	if (focus_ref->type == NODE_LEAF) {
-		Node *container = node_create(NODE_CONTAINER, ws);
-		container->split_type = desired_split;
+	if (is_dwindle || explicit_split) {
+		if (focus_ref->type == NODE_LEAF) {
+			Node *container = node_create(NODE_CONTAINER, ws);
+			container->split_type = desired_split;
 
-		node_insert_after(focus_ref, container);
-		node_insert_child(container, focus_ref);
-		node_insert_child(container, leaf);
+			node_insert_after(focus_ref, container);
+			node_insert_child(container, focus_ref);
+			node_insert_child(container, leaf);
+		} else {
+			node_insert_after(focus_ref, leaf);
+		}
 	} else {
-		node_insert_after(focus_ref, leaf);
+		if (node_has_single_child(target_parent)) {
+			target_parent->split_type = desired_split;
+		}
+		if (focus_ref->type == NODE_LEAF) {
+			node_insert_after(focus_ref, leaf);
+		} else {
+			node_insert_child(target_parent, leaf);
+		}
 	}
 
 	ws->focused_node = leaf;
@@ -832,14 +850,26 @@ tree_set_split_type(const Arg *arg)
 {
 	Client *c;
 	Workspace *ws;
+	SplitType st;
 
 	if (!selmon || !arg)
 		return;
 
+	st = (SplitType)arg->i;
 	c = focustop(selmon);
 	ws = (c && c->ws) ? c->ws : selmon->active_workspace;
-	if (ws)
-		ws->next_split = (SplitType)arg->i;
+	if (!ws)
+		return;
+
+	ws->next_split = st;
+
+	if (c && c->node && c->node->parent && c->node->parent->type != NODE_ROOT) {
+		c->node->parent->split_type = st;
+		arrange(selmon);
+	} else if (ws->root && !wl_list_empty(&ws->root->children)) {
+		ws->root->split_type = st;
+		arrange(selmon);
+	}
 }
 
 static void
