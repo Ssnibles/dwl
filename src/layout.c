@@ -511,25 +511,49 @@ setmfact(const Arg *arg)
 }
 
 /* Overview Mode Grid Layout Algorithm */
+static int
+get_overview_clients(Monitor *m, Client **leaves, int max)
+{
+	Client *c;
+	int count = (m && m->active_workspace) ? get_workspace_leaves(m->active_workspace, leaves, max) : 0;
+
+	wl_list_for_each(c, &clients, link) {
+		if (c->mon == m && (!c->ws || c->ws->id != SCRATCHPAD_WORKSPACE)) {
+			int found = 0, j;
+			for (j = 0; j < count; j++) {
+				if (leaves[j] == c) {
+					found = 1;
+					break;
+				}
+			}
+			if (!found && count < max)
+				leaves[count++] = c;
+		}
+	}
+	return count;
+}
+
+/* Overview Mode Grid Layout Algorithm */
 void
 overview(Monitor *m)
 {
+	Client *leaves[128];
 	Client *c;
-	unsigned int n = 0, i = 0, cols, rows, row, col;
+	int n, i, cols, rows, row, col;
 	int inset_x, inset_y, available_w, available_h;
 	int tile_w, tile_h, grid_x, grid_y;
 	int last_row_cols, last_row_offset;
 
-	wl_list_for_each(c, &clients, link) {
-		if (c->mon == m && (!c->ws || c->ws->id != SCRATCHPAD_WORKSPACE))
-			n++;
-	}
+	if (!m)
+		return;
+
+	n = get_overview_clients(m, leaves, 128);
 	if (n == 0) {
 		clearlabeloverlays(m);
 		return;
 	}
 
-	cols = (unsigned int)ceil(sqrt((double)n));
+	cols = (int)ceil(sqrt((double)n));
 	rows = (n + cols - 1) / cols;
 
 	inset_x = (int)(m->w.width * 0.04f);
@@ -545,10 +569,8 @@ overview(Monitor *m)
 		last_row_cols = cols;
 	last_row_offset = (available_w - (last_row_cols * tile_w)) / 2;
 
-	wl_list_for_each(c, &clients, link) {
-		if (c->mon != m || (c->ws && c->ws->id == SCRATCHPAD_WORKSPACE))
-			continue;
-
+	for (i = 0; i < n; i++) {
+		c = leaves[i];
 		row = i / cols;
 		col = i % cols;
 
@@ -565,7 +587,6 @@ overview(Monitor *m)
 			.width = MAX(1, tile_w - 2 * (int)gappx),
 			.height = MAX(1, tile_h - 2 * (int)gappx),
 		}, 0);
-		i++;
 	}
 	updatelabeloverlays(m);
 }
@@ -622,62 +643,48 @@ clearlabeloverlays(Monitor *m)
 void
 updatelabeloverlays(Monitor *m)
 {
+	Client *leaves[128];
 	Client *c;
-	int idx = 0;
-	if (!m || !m->isoverview) {
-		clearlabeloverlays(m);
-		return;
-	}
+	int n, i, num_labels = (int)strlen(overview_labels);
 
-	wl_list_for_each(c, &clients, link) {
+	clearlabeloverlays(m);
+	if (!m || !m->isoverview)
+		return;
+
+	n = get_overview_clients(m, leaves, 128);
+
+	for (i = 0; i < MIN(n, num_labels); i++) {
 		int font_idx, start_x, start_y, row, col;
-		int num_labels = (int)strlen(overview_labels);
-		char lbl, upper_lbl;
+		char lbl = overview_labels[i];
+		char upper_lbl = (lbl >= 'a' && lbl <= 'z') ? ('A' + (lbl - 'a')) : lbl;
 		struct wlr_scene_rect *bg_inner, *pixel;
 
-		if (c->mon != m || (c->ws && c->ws->id == SCRATCHPAD_WORKSPACE)) {
-			destroylabeloverlay(c);
+		c = leaves[i];
+		c->label = lbl;
+		c->label_tree = wlr_scene_tree_create(layers[LyrFloat]);
+		if (!c->label_tree)
 			continue;
-		}
 
-		if (idx >= num_labels) {
-			destroylabeloverlay(c);
-			continue;
-		}
+		wlr_scene_rect_create(c->label_tree, 36, 36, (float[]){0.1f, 0.1f, 0.15f, 0.95f});
+		bg_inner = wlr_scene_rect_create(c->label_tree, 32, 32, (float[]){0.2f, 0.5f, 0.9f, 1.0f});
+		wlr_scene_node_set_position(&bg_inner->node, 2, 2);
 
-		lbl = overview_labels[idx];
-		idx++;
-
-		if (c->label != lbl || !c->label_tree) {
-			destroylabeloverlay(c);
-			c->label = lbl;
-			c->label_tree = wlr_scene_tree_create(layers[LyrFloat]);
-			if (c->label_tree) {
-				wlr_scene_rect_create(c->label_tree, 36, 36, (float[]){0.1f, 0.1f, 0.15f, 0.95f});
-				bg_inner = wlr_scene_rect_create(c->label_tree, 32, 32, (float[]){0.2f, 0.5f, 0.9f, 1.0f});
-				wlr_scene_node_set_position(&bg_inner->node, 2, 2);
-
-				upper_lbl = (lbl >= 'a' && lbl <= 'z') ? ('A' + (lbl - 'a')) : lbl;
-				font_idx = (upper_lbl >= 'A' && upper_lbl <= 'Z') ? (upper_lbl - 'A') : 0;
-				start_x = 10;
-				start_y = 7;
-				for (row = 0; row < 7; row++) {
-					for (col = 0; col < 5; col++) {
-						if ((font5x7[font_idx][row] >> (4 - col)) & 1) {
-							pixel = wlr_scene_rect_create(c->label_tree, 3, 3, (float[]){1.0f, 1.0f, 1.0f, 1.0f});
-							wlr_scene_node_set_position(&pixel->node, start_x + col * 3, start_y + row * 3);
-						}
-					}
+		font_idx = (upper_lbl >= 'A' && upper_lbl <= 'Z') ? (upper_lbl - 'A') : 0;
+		start_x = 10;
+		start_y = 7;
+		for (row = 0; row < 7; row++) {
+			for (col = 0; col < 5; col++) {
+				if ((font5x7[font_idx][row] >> (4 - col)) & 1) {
+					pixel = wlr_scene_rect_create(c->label_tree, 3, 3, (float[]){1.0f, 1.0f, 1.0f, 1.0f});
+					wlr_scene_node_set_position(&pixel->node, start_x + col * 3, start_y + row * 3);
 				}
 			}
 		}
 
-		if (c->label_tree) {
-			int badge_x = c->geom.x + (c->geom.width - 36) / 2;
-			int badge_y = c->geom.y + (c->geom.height - 36) / 2;
-			wlr_scene_node_set_position(&c->label_tree->node, badge_x, badge_y);
-			wlr_scene_node_raise_to_top(&c->label_tree->node);
-		}
+		int badge_x = c->geom.x + (c->geom.width - 36) / 2;
+		int badge_y = c->geom.y + (c->geom.height - 36) / 2;
+		wlr_scene_node_set_position(&c->label_tree->node, badge_x, badge_y);
+		wlr_scene_node_raise_to_top(&c->label_tree->node);
 	}
 }
 
