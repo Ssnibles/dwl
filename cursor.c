@@ -181,7 +181,7 @@ buttonpress(struct wl_listener *listener, void *data)
 					selmon = m;
 					setmon(grabc, selmon);
 				}
-				if (was_move && active_snap_target && active_snap_type != SNAP_NONE) {
+				if (was_move && grabc_was_tiled && active_snap_target && active_snap_type != SNAP_NONE) {
 					Client *at = active_snap_target;
 					Workspace *ws = grabc->ws ? grabc->ws : (grabc->mon ? grabc->mon->active_workspace : selmon->active_workspace);
 
@@ -432,88 +432,91 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 
 	/* If we are currently grabbing the mouse, handle and return */
 	if (cursor_mode == CurMove) {
-		Client *tc, *at = NULL;
-		double min_dist = 1e9;
-
 		/* Move the grabbed client to the new position. */
 		resize(grabc, (struct wlr_box){.x = (int)round(cursor->x) - grabcx, .y = (int)round(cursor->y) - grabcy,
 			.width = grabc->geom.width, .height = grabc->geom.height}, 1);
 
-		/* Find nearest tileable client target for snapping feedback */
+		/* Find nearest tileable client target for snapping feedback only if window was tiled */
+		if (grabc_was_tiled) {
+			Client *tc, *at = NULL;
+			double min_dist = 1e9;
 
-		wl_list_for_each(tc, &clients, link) {
-			double tdx = 0, tdy = 0, dist;
-			if (!client_is_tileable(tc) || tc == grabc || tc->mon != selmon || tc->ws != grabc->ws)
-				continue;
-			if (cursor->x < tc->geom.x)
-				tdx = tc->geom.x - cursor->x;
-			else if (cursor->x > tc->geom.x + tc->geom.width)
-				tdx = cursor->x - (tc->geom.x + tc->geom.width);
+			wl_list_for_each(tc, &clients, link) {
+				double tdx = 0, tdy = 0, dist;
+				if (!client_is_tileable(tc) || tc == grabc || tc->mon != selmon || tc->ws != grabc->ws)
+					continue;
+				if (cursor->x < tc->geom.x)
+					tdx = tc->geom.x - cursor->x;
+				else if (cursor->x > tc->geom.x + tc->geom.width)
+					tdx = cursor->x - (tc->geom.x + tc->geom.width);
 
-			if (cursor->y < tc->geom.y)
-				tdy = tc->geom.y - cursor->y;
-			else if (cursor->y > tc->geom.y + tc->geom.height)
-				tdy = cursor->y - (tc->geom.y + tc->geom.height);
+				if (cursor->y < tc->geom.y)
+					tdy = tc->geom.y - cursor->y;
+				else if (cursor->y > tc->geom.y + tc->geom.height)
+					tdy = cursor->y - (tc->geom.y + tc->geom.height);
 
-			dist = tdx * tdx + tdy * tdy;
-			if (dist < min_dist) {
-				min_dist = dist;
-				at = tc;
-			}
-		}
-
-		if (at && at->geom.width > 0 && at->geom.height > 0) {
-			double norm_x = (cursor->x - at->geom.x) / (double)at->geom.width - 0.5;
-			double norm_y = (cursor->y - at->geom.y) / (double)at->geom.height - 0.5;
-			struct wlr_box snap_box;
-
-			if (fabs(norm_x) < 0.25 && fabs(norm_y) < 0.25) {
-				active_snap_type = SNAP_CENTER;
-				active_snap_target = at;
-				snap_box = at->geom;
-			} else {
-				active_snap_target = at;
-				if (fabs(norm_x) > fabs(norm_y)) {
-					int edge_w = MAX(1, (int)round(at->geom.width * 0.20));
-					if (norm_x < 0) {
-						active_snap_type = SNAP_LEFT;
-						snap_box = (struct wlr_box){
-							.x = at->geom.x,
-							.y = at->geom.y,
-							.width = edge_w,
-							.height = at->geom.height
-						};
-					} else {
-						active_snap_type = SNAP_RIGHT;
-						snap_box = (struct wlr_box){
-							.x = at->geom.x + at->geom.width - edge_w,
-							.y = at->geom.y,
-							.width = edge_w,
-							.height = at->geom.height
-						};
-					}
-				} else {
-					int edge_h = MAX(1, (int)round(at->geom.height * 0.20));
-					if (norm_y < 0) {
-						active_snap_type = SNAP_TOP;
-						snap_box = (struct wlr_box){
-							.x = at->geom.x,
-							.y = at->geom.y,
-							.width = at->geom.width,
-							.height = edge_h
-						};
-					} else {
-						active_snap_type = SNAP_BOTTOM;
-						snap_box = (struct wlr_box){
-							.x = at->geom.x,
-							.y = at->geom.y + at->geom.height - edge_h,
-							.width = at->geom.width,
-							.height = edge_h
-						};
-					}
+				dist = tdx * tdx + tdy * tdy;
+				if (dist < min_dist) {
+					min_dist = dist;
+					at = tc;
 				}
 			}
-			update_snap_overlay(snap_box, active_snap_type);
+
+			if (at && at->geom.width > 0 && at->geom.height > 0) {
+				double norm_x = (cursor->x - at->geom.x) / (double)at->geom.width - 0.5;
+				double norm_y = (cursor->y - at->geom.y) / (double)at->geom.height - 0.5;
+				struct wlr_box snap_box;
+
+				if (fabs(norm_x) < 0.25 && fabs(norm_y) < 0.25) {
+					active_snap_type = SNAP_CENTER;
+					active_snap_target = at;
+					snap_box = at->geom;
+				} else {
+					active_snap_target = at;
+					if (fabs(norm_x) > fabs(norm_y)) {
+						int edge_w = MAX(1, (int)round(at->geom.width * 0.20));
+						if (norm_x < 0) {
+							active_snap_type = SNAP_LEFT;
+							snap_box = (struct wlr_box){
+								.x = at->geom.x,
+								.y = at->geom.y,
+								.width = edge_w,
+								.height = at->geom.height
+							};
+						} else {
+							active_snap_type = SNAP_RIGHT;
+							snap_box = (struct wlr_box){
+								.x = at->geom.x + at->geom.width - edge_w,
+								.y = at->geom.y,
+								.width = edge_w,
+								.height = at->geom.height
+							};
+						}
+					} else {
+						int edge_h = MAX(1, (int)round(at->geom.height * 0.20));
+						if (norm_y < 0) {
+							active_snap_type = SNAP_TOP;
+							snap_box = (struct wlr_box){
+								.x = at->geom.x,
+								.y = at->geom.y,
+								.width = at->geom.width,
+								.height = edge_h
+							};
+						} else {
+							active_snap_type = SNAP_BOTTOM;
+							snap_box = (struct wlr_box){
+								.x = at->geom.x,
+								.y = at->geom.y + at->geom.height - edge_h,
+								.width = at->geom.width,
+								.height = edge_h
+							};
+						}
+					}
+				}
+				update_snap_overlay(snap_box, active_snap_type);
+			} else {
+				destroy_snap_overlay();
+			}
 		} else {
 			destroy_snap_overlay();
 		}
@@ -565,6 +568,7 @@ moveresize(const Arg *arg)
 	if (!grabc || client_is_unmanaged(grabc) || grabc->isfullscreen)
 		return;
 
+	destroy_snap_overlay();
 	/* Float the window and tell motionnotify to grab it */
 	grabc_was_tiled = !grabc->isfloating;
 	grabc_start_geom = grabc->geom;
