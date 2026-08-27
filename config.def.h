@@ -10,6 +10,8 @@ static const int warpcursor                = 1;  /* warp cursor to center of win
 static const int bypass_surface_visibility = 0;  /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */
 static const unsigned int borderpx         = 2;  /* border pixel of windows */
 static const unsigned int gappx            = 8;  /* margin/gap pixel around/between windows */
+static const unsigned int min_width        = 100; /* minimum width of windows */
+static const unsigned int min_height       = 100; /* minimum height of windows */
 static const unsigned int corner_radius    = 8;  /* rounded corner radius of windows */
 static const float rootcolor[]             = COLOR(0x19181dff);
 static const float bordercolor[]           = COLOR(0x32303aff);
@@ -143,10 +145,14 @@ static const Key keys[] = {
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_Right,       tree_resize_dir,     {.i = WLR_DIRECTION_RIGHT} },
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_Up,          tree_resize_dir,     {.i = WLR_DIRECTION_UP} },
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_Down,        tree_resize_dir,     {.i = WLR_DIRECTION_DOWN} },
-	{ MODKEY,                    XKB_KEY_equal,       tree_resize_active,  {.f = +0.05f} },
-	{ MODKEY,                    XKB_KEY_minus,       tree_resize_active,  {.f = -0.05f} },
+	{ MODKEY,                    XKB_KEY_equal,       tree_resize_active,  {.f = +0.15f} },
+	{ MODKEY,                    XKB_KEY_minus,       tree_resize_active,  {.f = -0.15f} },
 
 	/* Tree Split Type & Equalization */
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_v,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_V,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           tree_set_split_type, {.i = SPLIT_HORIZONTAL} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_B,           tree_set_split_type, {.i = SPLIT_HORIZONTAL} },
 	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_v,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
 	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_b,           tree_set_split_type, {.i = SPLIT_HORIZONTAL} },
 	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_e,           tree_equalize_active,  {0} },
@@ -179,6 +185,12 @@ static const Key keys[] = {
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_ampersand,   move_to_workspace, {.i = 7} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_asterisk,    move_to_workspace, {.i = 8} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_parenleft,   move_to_workspace, {.i = 9} },
+
+	/* Scratchpad Controls */
+	{ MODKEY,                    XKB_KEY_grave,       togglescratchpad_view,   {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_asciitilde,  togglescratchpad_client, {0} },
+	{ MODKEY,                    XKB_KEY_p,           togglescratchpad_view,   {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_p,           togglescratchpad_client, {0} },
 
 	/* Monitor Focus (Vim & Arrow keys) */
 	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_h,           focusmon,         {.i = WLR_DIRECTION_LEFT} },

@@ -82,7 +82,7 @@
 #define MAX(A, B)               ((A) > (B) ? (A) : (B))
 #define MIN(A, B)               ((A) < (B) ? (A) : (B))
 #define CLEANMASK(mask)         (mask & ~WLR_MODIFIER_CAPS)
-#define VISIBLEON(C, M)         ((M) && (C)->mon == (M) && (C)->ws == (M)->active_workspace)
+#define VISIBLEON(C, M)         ((M) && (C)->mon == (M) && ((C)->ws == (M)->active_workspace || ((C)->ws && (C)->ws->id == SCRATCHPAD_WORKSPACE && (M)->scratchpad_showing)))
 #define LENGTH(X)               (sizeof X / sizeof X[0])
 #define END(A)                  ((A) + LENGTH(A))
 #define LISTEN(E, L, H)         wl_signal_add((E), ((L)->notify = (H), (L)))
@@ -145,10 +145,11 @@ struct Client {
 	struct wl_listener set_hints;
 #endif
 	unsigned int bw;
-	int isfloating, isurgent, isfullscreen;
+	int isfloating, isurgent, isfullscreen, wasfloating;
 	uint32_t resize; /* configure serial of a pending resize */
 	char label;
 	struct wlr_scene_tree *label_tree;
+	int prev_workspace;
 	Workspace *ws;
 	Node *node;
 };
@@ -218,6 +219,7 @@ struct Monitor {
 	int isoverview;
 	Client *overview_prev_client;
 	Workspace *overview_prev_ws;
+	int scratchpad_showing;
 	struct wl_list workspaces; /* List of Workspace structs */
 	Workspace *active_workspace;
 };
@@ -299,6 +301,7 @@ void pointerfocus(Client *c, struct wlr_surface *surface, double sx, double sy, 
 void printstatus(void);
 void resize(Client *c, struct wlr_box geo, int interact);
 void setfloating(Client *c, int floating);
+void setfullscreen(Client *c, int fullscreen);
 void setmon(Client *c, Monitor *m);
 Monitor *xytomon(double x, double y);
 void xytonode(double x, double y, struct wlr_surface **psurface, Client **pc, LayerSurface **pl, double *nx, double *ny);

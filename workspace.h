@@ -31,8 +31,12 @@ void workspace_switch(Workspace *ws);
 void client_move_to_workspace(struct Client *c, Workspace *ws);
 Workspace *workspace_get_by_id(struct Monitor *m, int id);
 
+#define SCRATCHPAD_WORKSPACE 0
+
 /* Keybinding handlers */
 void view_workspace(const union Arg *arg);
 void move_to_workspace(const union Arg *arg);
+void togglescratchpad_client(const union Arg *arg);
+void togglescratchpad_view(const union Arg *arg);
 
 #endif /* WORKSPACE_H */

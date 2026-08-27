@@ -145,6 +145,11 @@ buttonpress(struct wl_listener *listener, void *data)
 			return;
 		}
 
+		if (selmon && selmon->scratchpad_showing && c && c->ws && c->ws->id != SCRATCHPAD_WORKSPACE) {
+			selmon->scratchpad_showing = 0;
+			arrange(selmon);
+		}
+
 		if (c && (!client_is_unmanaged(c) || client_wants_focus(c)))
 			focusclient(c, 1);
 
@@ -178,7 +183,7 @@ buttonpress(struct wl_listener *listener, void *data)
 				}
 				if (was_move && active_snap_target && active_snap_type != SNAP_NONE) {
 					Client *at = active_snap_target;
-					Workspace *ws = grabc->mon ? grabc->mon->active_workspace : selmon->active_workspace;
+					Workspace *ws = grabc->ws ? grabc->ws : (grabc->mon ? grabc->mon->active_workspace : selmon->active_workspace);
 
 					if (active_snap_type == SNAP_CENTER) {
 						/* Center Zone: SWAP windows */
@@ -245,10 +250,26 @@ buttonpress(struct wl_listener *listener, void *data)
 					if (fabsf(scale_h - 1.0f) > 0.01f && scale_h > 0.05f && scale_h < 20.0f)
 						grabc->node->ratio_v = clamp_ratio(grabc->node->ratio_v * scale_h);
 
-					if (selmon && (selmon->lt[selmon->sellt]->arrange == tile || selmon->lt[selmon->sellt]->arrange == master_stack)) {
+					Workspace *ws = grabc->ws ? grabc->ws : (selmon ? selmon->active_workspace : NULL);
+					const Layout *lt = (ws && ws->layout) ? ws->layout : (selmon ? selmon->lt[selmon->sellt] : NULL);
+
+					if (selmon && lt && (lt->arrange == tile || lt->arrange == master_stack)) {
 						if (fabsf(scale_w - 1.0f) > 0.01f && selmon->w.width > 0) {
+							Client *leaves[128];
+							int n = node_collect_leaves(ws ? ws->root : NULL, leaves, 128);
+							int nm = MIN(n, selmon->nmaster);
+							int is_master = 0;
+							for (int i = 0; i < nm; i++) {
+								if (leaves[i] == grabc) {
+									is_master = 1;
+									break;
+								}
+							}
 							float delta_mfact = (float)(new_w - old_w) / (float)selmon->w.width;
-							selmon->mfact = MIN(0.9f, MAX(0.1f, selmon->mfact + delta_mfact));
+							if (is_master)
+								selmon->mfact = MIN(0.9f, MAX(0.1f, selmon->mfact + delta_mfact));
+							else
+								selmon->mfact = MIN(0.9f, MAX(0.1f, selmon->mfact - delta_mfact));
 						}
 					}
 					arrange(selmon);
@@ -368,8 +389,17 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 				relative_pointer_mgr, seat, (uint64_t)time * 1000,
 				dx, dy, dx_unaccel, dy_unaccel);
 
-		wl_list_for_each(constraint, &pointer_constraints->constraints, link)
-			cursorconstrain(constraint);
+		wl_list_for_each(constraint, &pointer_constraints->constraints, link) {
+			if (constraint->surface == seat->pointer_state.focused_surface) {
+				cursorconstrain(constraint);
+				break;
+			}
+		}
+		if (&constraint->link == &pointer_constraints->constraints
+				&& active_constraint) {
+			wlr_pointer_constraint_v1_send_deactivated(active_constraint);
+			active_constraint = NULL;
+		}
 
 		if (active_constraint && cursor_mode != CurResize && cursor_mode != CurMove) {
 			toplevel_from_wlr_surface(active_constraint->surface, &c, NULL);
@@ -412,7 +442,7 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 
 		wl_list_for_each(tc, &clients, link) {
 			double dx = 0, dy = 0, dist;
-			if (!client_is_tileable(tc) || tc == grabc)
+			if (!client_is_tileable(tc) || tc == grabc || tc->mon != selmon || tc->ws != grabc->ws)
 				continue;
 			if (cursor->x < tc->geom.x)
 				dx = tc->geom.x - cursor->x;

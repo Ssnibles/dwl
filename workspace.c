@@ -86,6 +86,8 @@ workspace_switch(Workspace *ws)
 
 	m = ws->mon;
 	m->active_workspace = ws;
+	if (ws->layout)
+		m->lt[m->sellt] = ws->layout;
 
 	arrange(m);
 
@@ -101,6 +103,7 @@ void
 client_move_to_workspace(Client *c, Workspace *ws)
 {
 	Monitor *old_mon;
+	int visible;
 
 	if (!c || !ws || c->ws == ws)
 		return;
@@ -111,21 +114,24 @@ client_move_to_workspace(Client *c, Workspace *ws)
 	if (c->node)
 		node_remove(c->node);
 
-	if (c->mon != ws->mon)
-		setmon(c, ws->mon);
+	if (c->mon != ws->mon) {
+		c->mon = ws->mon;
+		c->prev = c->geom;
+		resize(c, c->geom, 0);
+	}
 
 	c->ws = ws;
+	if (ws->id != SCRATCHPAD_WORKSPACE)
+		c->prev_workspace = 0;
+
 	if (!c->isfloating)
 		node_insert_client(ws, c);
 
 	/* Visibility check */
-	if (ws == ws->mon->active_workspace) {
-		wlr_scene_node_set_enabled(&c->scene->node, true);
-		client_set_suspended(c, 0);
-	} else {
-		wlr_scene_node_set_enabled(&c->scene->node, false);
-		client_set_suspended(c, 1);
-	}
+	visible = (ws == ws->mon->active_workspace) ||
+	          (ws->id == SCRATCHPAD_WORKSPACE && ws->mon->scratchpad_showing);
+	wlr_scene_node_set_enabled(&c->scene->node, visible);
+	client_set_suspended(c, !visible);
 
 	if (old_mon != ws->mon)
 		arrange(old_mon);
@@ -164,4 +170,140 @@ move_to_workspace(const Arg *arg)
 	ws = workspace_get_by_id(selmon, arg->i);
 	if (ws)
 		client_move_to_workspace(c, ws);
+}
+
+void
+togglescratchpad_client(const Arg *arg)
+{
+	Client *c, *target_c = NULL;
+	Workspace *scratch_ws, *target_ws = NULL;
+	int target_id;
+	int remaining = 0;
+
+	if (!selmon)
+		return;
+
+	scratch_ws = workspace_get_by_id(selmon, SCRATCHPAD_WORKSPACE);
+	if (!scratch_ws)
+		return;
+
+	c = focustop(selmon);
+
+	if (c && c->ws && c->ws->id != SCRATCHPAD_WORKSPACE) {
+		/* Case A: Window is on a standard workspace -> Save origin & move to SCRATCHPAD_WORKSPACE */
+		c->prev_workspace = c->ws->id;
+		c->wasfloating = c->isfloating;
+		if (c->isfullscreen)
+			setfullscreen(c, 0);
+		selmon->scratchpad_showing = 1;
+		client_move_to_workspace(c, scratch_ws);
+		arrange(selmon);
+		focusclient(c, 1);
+		motionnotify(0, NULL, 0, 0, 0, 0);
+		return;
+	}
+
+	/* Case B / Fallback: Restore target client from scratchpad to standard workspace */
+	if (c && c->ws && c->ws->id == SCRATCHPAD_WORKSPACE) {
+		target_c = c;
+	} else {
+		/* Search for first client sitting in selmon's scratchpad */
+		wl_list_for_each(c, &clients, link) {
+			if (c->mon == selmon && c->ws == scratch_ws) {
+				target_c = c;
+				break;
+			}
+		}
+	}
+
+	if (!target_c)
+		return;
+
+	/* Restore target_c to origin workspace or active workspace */
+	target_id = target_c->prev_workspace;
+	target_c->prev_workspace = 0;
+
+	if (target_id > 0 && target_id != SCRATCHPAD_WORKSPACE)
+		target_ws = workspace_get_by_id(selmon, target_id);
+
+	if (!target_ws || target_ws->id == SCRATCHPAD_WORKSPACE)
+		target_ws = selmon->active_workspace;
+
+	if (!target_ws)
+		return;
+
+	/* Move client to target workspace */
+	client_move_to_workspace(target_c, target_ws);
+
+	/* Restore floating/tiling state on target workspace */
+	if (!target_c->wasfloating && target_c->isfloating)
+		setfloating(target_c, 0);
+	target_c->wasfloating = 0;
+
+	/* Check if any scratchpad clients remain on selmon */
+	wl_list_for_each(c, &clients, link) {
+		if (c->mon == selmon && c->ws == scratch_ws)
+			remaining++;
+	}
+	if (remaining == 0)
+		selmon->scratchpad_showing = 0;
+
+	arrange(selmon);
+	focusclient(target_c, 1);
+	motionnotify(0, NULL, 0, 0, 0, 0);
+}
+
+void
+togglescratchpad_view(const Arg *arg)
+{
+	Workspace *scratch_ws;
+	Client *c, *scratch_c = NULL;
+	Monitor *m;
+
+	if (!selmon)
+		return;
+
+	scratch_ws = workspace_get_by_id(selmon, SCRATCHPAD_WORKSPACE);
+	if (!scratch_ws)
+		return;
+
+	selmon->scratchpad_showing = !selmon->scratchpad_showing;
+
+	if (selmon->scratchpad_showing) {
+		/* Close scratchpad showing on other monitors */
+		wl_list_for_each(m, &mons, link) {
+			if (m != selmon && m->scratchpad_showing) {
+				m->scratchpad_showing = 0;
+				arrange(m);
+			}
+		}
+
+		/* Gather scratchpad clients from other monitors onto selmon */
+		wl_list_for_each(c, &clients, link) {
+			if (c->ws && c->ws->id == SCRATCHPAD_WORKSPACE && c->mon != selmon) {
+				setmon(c, selmon);
+				client_move_to_workspace(c, scratch_ws);
+			}
+		}
+
+		arrange(selmon);
+
+		/* Search fstack for the most recently focused scratchpad client */
+		wl_list_for_each(c, &fstack, flink) {
+			if (c->mon == selmon && c->ws == scratch_ws) {
+				scratch_c = c;
+				break;
+			}
+		}
+		if (scratch_c)
+			focusclient(scratch_c, 1);
+		else if ((c = focustop(selmon)))
+			focusclient(c, 1);
+	} else {
+		arrange(selmon);
+		/* Focus top active workspace client */
+		c = focustop(selmon);
+		focusclient(c, 1);
+	}
+	motionnotify(0, NULL, 0, 0, 0, 0);
 }

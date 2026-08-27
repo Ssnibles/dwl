@@ -70,7 +70,7 @@ static void run(char *startup_cmd);
 void setcursor(struct wl_listener *listener, void *data);
 void setcursorshape(struct wl_listener *listener, void *data);
 void setfloating(Client *c, int floating);
-static void setfullscreen(Client *c, int fullscreen);
+void setfullscreen(Client *c, int fullscreen);
 void setlayout(const Arg *arg);
 void setmfact(const Arg *arg);
 void setmon(Client *c, Monitor *m);
@@ -201,9 +201,9 @@ static struct wlr_xwayland *xwayland;
 void
 applybounds(Client *c, struct wlr_box *bbox)
 {
-	/* set minimum possible */
-	c->geom.width = MAX(1 + 2 * (int)c->bw, c->geom.width);
-	c->geom.height = MAX(1 + 2 * (int)c->bw, c->geom.height);
+	/* set minimum possible bounds enforcing min_width and min_height */
+	c->geom.width = MAX((int)min_width + 2 * (int)c->bw, c->geom.width);
+	c->geom.height = MAX((int)min_height + 2 * (int)c->bw, c->geom.height);
 
 	if (c->geom.x >= bbox->x + bbox->width)
 		c->geom.x = bbox->x + bbox->width - c->geom.width;
@@ -736,8 +736,26 @@ Client *
 focustop(Monitor *m)
 {
 	Client *c;
+	if (!m)
+		return NULL;
+
+	if (m->isoverview) {
+		wl_list_for_each(c, &fstack, flink) {
+			if (c->mon == m)
+				return c;
+		}
+		return NULL;
+	}
+
+	if (m->scratchpad_showing) {
+		wl_list_for_each(c, &fstack, flink) {
+			if (c->mon == m && c->ws && c->ws->id == SCRATCHPAD_WORKSPACE)
+				return c;
+		}
+	}
+
 	wl_list_for_each(c, &fstack, flink) {
-		if (m && m->isoverview ? (c->mon == m) : VISIBLEON(c, m))
+		if (VISIBLEON(c, m))
 			return c;
 	}
 	return NULL;
@@ -908,7 +926,10 @@ mapnotify(struct wl_listener *listener, void *data)
 	} else {
 		applyrules(c);
 	}
-	if (c->mon && c->mon->active_workspace)
+	sel = focustop(c->mon);
+	if (sel && sel->ws)
+		c->ws = sel->ws;
+	else if (c->mon && c->mon->active_workspace)
 		c->ws = c->mon->active_workspace;
 
 	if (c->isfloating)
@@ -1001,10 +1022,10 @@ printstatus(void)
 
 		occ = 0;
 		selected = 0;
-		if (m->active_workspace)
+		if (m->active_workspace && m->active_workspace->id > 0)
 			selected = 1u << (m->active_workspace->id - 1);
 		wl_list_for_each(c, &clients, link) {
-			if (c->mon == m && c->ws)
+			if (c->mon == m && c->ws && c->ws->id > 0)
 				occ |= (1u << (c->ws->id - 1));
 		}
 		printf("%s tags %u %u\n", m->wlr_output->name, occ, selected);
@@ -1226,7 +1247,8 @@ setmon(Client *c, Monitor *m)
 	c->prev = c->geom;
 
 	if (m) {
-		c->ws = m->active_workspace;
+		Client *sel = focustop(m);
+		c->ws = (sel && sel->ws) ? sel->ws : m->active_workspace;
 		if (!c->isfloating)
 			node_insert_client(c->ws, c);
 	}
@@ -1577,10 +1599,20 @@ unmapnotify(struct wl_listener *listener, void *data)
 		c->mon = NULL;
 		c->ws = NULL;
 		c->node = NULL;
+		if (m && ws && ws->id == SCRATCHPAD_WORKSPACE && m->scratchpad_showing) {
+			int remaining = 0;
+			Client *tmp;
+			wl_list_for_each(tmp, &clients, link) {
+				if (tmp->mon == m && tmp->ws && tmp->ws->id == SCRATCHPAD_WORKSPACE)
+					remaining++;
+			}
+			if (remaining == 0)
+				m->scratchpad_showing = 0;
+		}
 		if (m)
 			arrange(m);
 
-		if (ws) {
+		if (ws && m && ws == m->active_workspace) {
 			if (ws->focused_node && ws->focused_node->type == NODE_LEAF && ws->focused_node->client) {
 				next_focus = ws->focused_node->client;
 			} else if (ws->focused_node) {
@@ -1650,9 +1682,12 @@ xytonode(double x, double y, struct wlr_surface **psurface,
 		if (!(node = wlr_scene_node_at(&layers[layer]->node, x, y, nx, ny)))
 			continue;
 
-		if (node->type == WLR_SCENE_NODE_BUFFER)
-			surface = wlr_scene_surface_try_from_buffer(
-					wlr_scene_buffer_from_node(node))->surface;
+		if (node->type == WLR_SCENE_NODE_BUFFER) {
+			struct wlr_scene_surface *ss = wlr_scene_surface_try_from_buffer(
+					wlr_scene_buffer_from_node(node));
+			if (ss)
+				surface = ss->surface;
+		}
 		/* Walk the tree to find a node that knows the client */
 		for (pnode = node; pnode && !c; pnode = &pnode->parent->node)
 			c = pnode->data;

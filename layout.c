@@ -22,7 +22,7 @@ arrange(Monitor *m)
 
 	wl_list_for_each(c, &clients, link) {
 		if (c->mon == m) {
-			int visible = m->isoverview || (c->ws == m->active_workspace);
+			int visible = m->isoverview || VISIBLEON(c, m);
 			wlr_scene_node_set_enabled(&c->scene->node, visible);
 			client_set_suspended(c, !visible);
 		}
@@ -36,44 +36,59 @@ arrange(Monitor *m)
 	else
 		strncpy(m->ltsymbol, m->lt[m->sellt]->symbol, LENGTH(m->ltsymbol));
 
-	/* We move all floating clients to LyrFloat so they are always on top of tiled ones */
+	/* We move all floating clients and scratchpad overlay clients to LyrFloat so they are on top */
 	wl_list_for_each(c, &clients, link) {
+		int on_top;
 		if (c->mon != m || c->scene->node.parent == layers[LyrFS])
 			continue;
 
+		on_top = (c->isfloating || (c->ws && c->ws->id == SCRATCHPAD_WORKSPACE)) && !m->isoverview;
 		wlr_scene_node_reparent(&c->scene->node,
-				(c->isfloating && !m->isoverview) ? layers[LyrFloat] : layers[LyrTile]);
+				on_top ? layers[LyrFloat] : layers[LyrTile]);
 	}
 
-	if (m->isoverview)
+	if (m->scratchpad_showing) {
+		wl_list_for_each(c, &clients, link) {
+			if (c->mon == m && c->ws && c->ws->id == SCRATCHPAD_WORKSPACE)
+				wlr_scene_node_raise_to_top(&c->scene->node);
+		}
+	}
+
+	if (m->isoverview) {
 		overview(m);
-	else if (m->lt[m->sellt]->arrange)
-		m->lt[m->sellt]->arrange(m);
+	} else {
+		if (m->active_workspace) {
+			const Layout *lt = m->active_workspace->layout ? m->active_workspace->layout : m->lt[m->sellt];
+			arrange_workspace(m, m->active_workspace, m->w, lt);
+		}
+
+		if (m->scratchpad_showing) {
+			Workspace *scratch_ws = workspace_get_by_id(m, SCRATCHPAD_WORKSPACE);
+			if (scratch_ws && scratch_ws->root) {
+				struct wlr_box overlay_box = m->w;
+				int margin = 32;
+				if (overlay_box.width > 2 * margin && overlay_box.height > 2 * margin) {
+					overlay_box.x += margin;
+					overlay_box.y += margin;
+					overlay_box.width -= 2 * margin;
+					overlay_box.height -= 2 * margin;
+				}
+				const Layout *lt = scratch_ws->layout ? scratch_ws->layout : m->lt[m->sellt];
+				arrange_workspace(m, scratch_ws, overlay_box, lt);
+			}
+		}
+	}
 
 	motionnotify(0, NULL, 0, 0, 0, 0);
 	checkidleinhibitor(NULL);
 }
 
-void
-tree_layout(Monitor *m)
-{
-	if (!m || !m->active_workspace || !m->active_workspace->root)
-		return;
-	node_arrange_recursive(m->active_workspace->root, m->w);
-}
-
-void
-bsp_layout(Monitor *m)
-{
-	tree_layout(m);
-}
-
 static inline int
-get_layout_leaves(Monitor *m, Client **leaves, int max)
+get_workspace_leaves(Workspace *ws, Client **leaves, int max)
 {
-	if (!m || !m->active_workspace || !m->active_workspace->root)
+	if (!ws || !ws->root)
 		return 0;
-	return node_collect_leaves(m->active_workspace->root, leaves, max);
+	return node_collect_leaves(ws->root, leaves, max);
 }
 
 static inline float
@@ -179,33 +194,28 @@ fibonacci_recursive(Client **leaves, int count, struct wlr_box box, int depth, i
 	fibonacci_recursive(leaves + 1, count - 1, b2, depth + 1, is_dwindle);
 }
 
-void
-dwindle(Monitor *m)
+static void
+dwindle_box(Monitor *m, Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
-	int n = get_layout_leaves(m, leaves, 128);
+	(void)m;
+	int n = get_workspace_leaves(ws, leaves, 128);
 	if (n > 0)
-		fibonacci_recursive(leaves, n, m->w, 0, 1);
+		fibonacci_recursive(leaves, n, box, 0, 1);
 }
 
-void
-fibonacci(Monitor *m, int s)
-{
-	(void)s;
-	spiral(m);
-}
-
-void
-spiral(Monitor *m)
+static void
+spiral_box(Monitor *m, Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
-	int n = get_layout_leaves(m, leaves, 128);
+	(void)m;
+	int n = get_workspace_leaves(ws, leaves, 128);
 	if (n > 0)
-		fibonacci_recursive(leaves, n, m->w, 0, 0);
+		fibonacci_recursive(leaves, n, box, 0, 0);
 }
 
-void
-columns(Monitor *m)
+static void
+columns_box(Monitor *m, Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
 	int i, n;
@@ -214,7 +224,8 @@ columns(Monitor *m)
 	float total_ratio = 0.0f;
 	int avail_w;
 
-	n = get_layout_leaves(m, leaves, 128);
+	(void)m;
+	n = get_workspace_leaves(ws, leaves, 128);
 	if (n == 0)
 		return;
 
@@ -223,34 +234,28 @@ columns(Monitor *m)
 	if (total_ratio <= 0.0f)
 		total_ratio = (float)n;
 
-	x = m->w.x + g;
-	avail_w = m->w.width - g * (n + 1);
+	x = box.x + g;
+	avail_w = box.width - g * (n + 1);
 
 	for (i = 0; i < n; i++) {
 		float r = client_get_ratio(leaves[i], 1);
 		if (i == n - 1)
-			w = m->w.x + m->w.width - g - x;
+			w = box.x + box.width - g - x;
 		else
 			w = (int)roundf((float)avail_w * (r / total_ratio));
 		w = MAX(1, w);
 		resize(leaves[i], (struct wlr_box){
 			.x = x,
-			.y = m->w.y + g,
+			.y = box.y + g,
 			.width = w,
-			.height = MAX(1, m->w.height - 2 * g)
+			.height = MAX(1, box.height - 2 * g)
 		}, 0);
 		x += w + g;
 	}
 }
 
-void
-master_stack(Monitor *m)
-{
-	tile(m);
-}
-
-void
-tile(Monitor *m)
+static void
+tile_box(Monitor *m, Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
 	unsigned int mw, my, ty;
@@ -261,7 +266,7 @@ tile(Monitor *m)
 	float total_m_ratio = 0.0f, total_s_ratio = 0.0f;
 	int avail_m_h, avail_s_h;
 
-	n = get_layout_leaves(m, leaves, 128);
+	n = get_workspace_leaves(ws, leaves, 128);
 	if (n == 0)
 		return;
 
@@ -269,21 +274,21 @@ tile(Monitor *m)
 	ns = n - nm;
 
 	if (ns > 0 && nm > 0) {
-		mw = (int)roundf((m->w.width - g) * m->mfact);
-		mx = m->w.x + g;
+		mw = (int)roundf((box.width - g) * m->mfact);
+		mx = box.x + g;
 		mw_final = mw - g - g / 2;
-		sx = m->w.x + mw + g / 2;
-		sw_final = m->w.width - mw - g / 2 - g;
+		sx = box.x + mw + g / 2;
+		sw_final = box.width - mw - g / 2 - g;
 	} else if (nm > 0) {
-		mw = m->w.width;
-		mx = m->w.x + g;
-		mw_final = m->w.width - 2 * g;
+		mw = box.width;
+		mx = box.x + g;
+		mw_final = box.width - 2 * g;
 		sx = mx;
-		sw_final = m->w.width - 2 * g;
+		sw_final = box.width - 2 * g;
 	} else {
 		mw = 0;
-		mx = m->w.x + g;
-		mw_final = m->w.width - 2 * g;
+		mx = box.x + g;
+		mw_final = box.width - 2 * g;
 		sx = mx;
 		sw_final = mw_final;
 	}
@@ -298,8 +303,8 @@ tile(Monitor *m)
 	if (total_m_ratio <= 0.0f) total_m_ratio = (float)nm;
 	if (total_s_ratio <= 0.0f) total_s_ratio = (float)ns;
 
-	avail_m_h = m->w.height - g * (nm + 1);
-	avail_s_h = m->w.height - g * (ns + 1);
+	avail_m_h = box.height - g * (nm + 1);
+	avail_s_h = box.height - g * (ns + 1);
 
 	my = ty = 0;
 	for (i = 0; i < n; i++) {
@@ -309,27 +314,27 @@ tile(Monitor *m)
 		if (i < m->nmaster) {
 			int h;
 			if (i == nm - 1)
-				h = m->w.height - my - g * 2;
+				h = box.height - my - g * 2;
 			else
 				h = (int)roundf((float)avail_m_h * (r / total_m_ratio));
 			h = MAX(1, h);
-			resize(c, (struct wlr_box){.x = mx, .y = m->w.y + my + g, .width = mw_final, .height = h}, 0);
+			resize(c, (struct wlr_box){.x = mx, .y = box.y + my + g, .width = mw_final, .height = h}, 0);
 			my += h + g;
 		} else {
 			int h;
 			if (i == n - 1)
-				h = m->w.height - ty - g * 2;
+				h = box.height - ty - g * 2;
 			else
 				h = (int)roundf((float)avail_s_h * (r / total_s_ratio));
 			h = MAX(1, h);
-			resize(c, (struct wlr_box){.x = sx, .y = m->w.y + ty + g, .width = sw_final, .height = h}, 0);
+			resize(c, (struct wlr_box){.x = sx, .y = box.y + ty + g, .width = sw_final, .height = h}, 0);
 			ty += h + g;
 		}
 	}
 }
 
-void
-monocle(Monitor *m)
+static void
+monocle_box(Monitor *m, Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
 	Client *c;
@@ -337,21 +342,113 @@ monocle(Monitor *m)
 	int g = (int)gappx;
 	struct wlr_box gbox;
 
-	n = get_layout_leaves(m, leaves, 128);
+	n = get_workspace_leaves(ws, leaves, 128);
 	gbox = (struct wlr_box){
-		.x = m->w.x + g,
-		.y = m->w.y + g,
-		.width = MAX(1, m->w.width - 2 * g),
-		.height = MAX(1, m->w.height - 2 * g),
+		.x = box.x + g,
+		.y = box.y + g,
+		.width = MAX(1, box.width - 2 * g),
+		.height = MAX(1, box.height - 2 * g),
 	};
 
 	for (i = 0; i < n; i++)
 		resize(leaves[i], gbox, 0);
 
-	if (n)
+	if (n && ws == m->active_workspace)
 		snprintf(m->ltsymbol, LENGTH(m->ltsymbol), "[%d]", n);
 	if ((c = focustop(m)))
 		wlr_scene_node_raise_to_top(&c->scene->node);
+}
+
+static void
+tree_layout_box(Monitor *m, Workspace *ws, struct wlr_box box)
+{
+	(void)m;
+	if (ws && ws->root)
+		node_arrange_recursive(ws->root, box);
+}
+
+void
+arrange_workspace(Monitor *m, Workspace *ws, struct wlr_box box, const Layout *lt)
+{
+	if (!m || !ws || !ws->root || !lt || !lt->arrange)
+		return;
+
+	if (lt->arrange == tree_layout || lt->arrange == bsp_layout) {
+		tree_layout_box(m, ws, box);
+	} else if (lt->arrange == tile || lt->arrange == master_stack) {
+		tile_box(m, ws, box);
+	} else if (lt->arrange == monocle) {
+		monocle_box(m, ws, box);
+	} else if (lt->arrange == dwindle) {
+		dwindle_box(m, ws, box);
+	} else if (lt->arrange == spiral || lt->arrange == fibonacci) {
+		spiral_box(m, ws, box);
+	} else if (lt->arrange == columns) {
+		columns_box(m, ws, box);
+	} else {
+		lt->arrange(m);
+	}
+}
+
+void
+tree_layout(Monitor *m)
+{
+	if (m && m->active_workspace)
+		tree_layout_box(m, m->active_workspace, m->w);
+}
+
+void
+bsp_layout(Monitor *m)
+{
+	tree_layout(m);
+}
+
+void
+dwindle(Monitor *m)
+{
+	if (m && m->active_workspace)
+		dwindle_box(m, m->active_workspace, m->w);
+}
+
+void
+fibonacci(Monitor *m, int s)
+{
+	(void)s;
+	spiral(m);
+}
+
+void
+spiral(Monitor *m)
+{
+	if (m && m->active_workspace)
+		spiral_box(m, m->active_workspace, m->w);
+}
+
+void
+columns(Monitor *m)
+{
+	if (m && m->active_workspace)
+		columns_box(m, m->active_workspace, m->w);
+}
+
+void
+master_stack(Monitor *m)
+{
+	tile(m);
+}
+
+void
+tile(Monitor *m)
+{
+	if (m && m->active_workspace)
+		tile_box(m, m->active_workspace, m->w);
+}
+
+void
+monocle(Monitor *m)
+{
+	if (m && m->active_workspace)
+		monocle_box(m, m->active_workspace, m->w);
 }
 
 void
@@ -366,12 +463,23 @@ incnmaster(const Arg *arg)
 void
 setlayout(const Arg *arg)
 {
+	Client *c;
+	Workspace *ws;
+
 	if (!selmon)
 		return;
+
+	c = focustop(selmon);
+	ws = (c && c->ws) ? c->ws : selmon->active_workspace;
+
 	if (!arg || !arg->v || arg->v != selmon->lt[selmon->sellt])
 		selmon->sellt ^= 1;
 	if (arg && arg->v)
 		selmon->lt[selmon->sellt] = (Layout *)arg->v;
+
+	if (ws)
+		ws->layout = selmon->lt[selmon->sellt];
+
 	strncpy(selmon->ltsymbol, selmon->lt[selmon->sellt]->symbol, LENGTH(selmon->ltsymbol));
 	arrange(selmon);
 	printstatus();
@@ -625,9 +733,12 @@ focusdir(const Arg *arg)
 	double wrap_dist = 1e18;
 	Client *wrap_best = NULL;
 	int dir = arg->i;
+	int is_scratch;
 
 	if (!selmon || !(c = focustop(selmon)))
 		return;
+
+	is_scratch = (selmon->scratchpad_showing && c->ws && c->ws->id == SCRATCHPAD_WORKSPACE);
 
 	cx = c->geom.x + c->geom.width / 2.0;
 	cy = c->geom.y + c->geom.height / 2.0;
@@ -637,6 +748,11 @@ focusdir(const Arg *arg)
 		double dist, wdist;
 
 		if (tc == c || (selmon->isoverview ? (tc->mon != selmon) : !VISIBLEON(tc, selmon)))
+			continue;
+
+		if (is_scratch && (!tc->ws || tc->ws->id != SCRATCHPAD_WORKSPACE))
+			continue;
+		if (!is_scratch && tc->ws && tc->ws->id == SCRATCHPAD_WORKSPACE)
 			continue;
 
 		tx = tc->geom.x + tc->geom.width / 2.0;
@@ -675,6 +791,8 @@ void
 focusstack(const Arg *arg)
 {
 	Client *c = NULL, *i;
+	int is_scratch;
+
 	if (!selmon || !(c = focustop(selmon)))
 		return;
 
@@ -683,11 +801,17 @@ focusstack(const Arg *arg)
 		return;
 	}
 
+	is_scratch = (selmon->scratchpad_showing && c->ws && c->ws->id == SCRATCHPAD_WORKSPACE);
+
 	if (arg->i > 0) {
 		wl_list_for_each(i, &c->flink, flink) {
 			if (&i->flink == &fstack)
 				continue;
 			if (VISIBLEON(i, selmon)) {
+				if (is_scratch && (!i->ws || i->ws->id != SCRATCHPAD_WORKSPACE))
+					continue;
+				if (!is_scratch && i->ws && i->ws->id == SCRATCHPAD_WORKSPACE)
+					continue;
 				c = i;
 				break;
 			}
@@ -697,6 +821,10 @@ focusstack(const Arg *arg)
 			if (&i->flink == &fstack)
 				continue;
 			if (VISIBLEON(i, selmon)) {
+				if (is_scratch && (!i->ws || i->ws->id != SCRATCHPAD_WORKSPACE))
+					continue;
+				if (!is_scratch && i->ws && i->ws->id == SCRATCHPAD_WORKSPACE)
+					continue;
 				c = i;
 				break;
 			}

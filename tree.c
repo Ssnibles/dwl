@@ -356,11 +356,13 @@ node_arrange_recursive(Node *node, struct wlr_box box)
 	if (node->type == NODE_LEAF) {
 		Client *c = node->client;
 		if (client_is_tileable(c)) {
+			int min_w = (int)min_width;
+			int min_h = (int)min_height;
 			struct wlr_box gbox = {
 				.x = box.x + g,
 				.y = box.y + g,
-				.width = MAX(1, box.width - 2 * g),
-				.height = MAX(1, box.height - 2 * g)
+				.width = MAX(min_w, box.width - 2 * g),
+				.height = MAX(min_h, box.height - 2 * g)
 			};
 			resize(c, gbox, 0);
 		}
@@ -467,9 +469,116 @@ tree_equalize_node(Node *node)
 void
 tree_equalize_active(const Arg *arg)
 {
-	if (selmon && selmon->active_workspace && selmon->active_workspace->root) {
-		tree_equalize_node(selmon->active_workspace->root);
+	Client *c;
+	Workspace *ws;
+
+	if (!selmon)
+		return;
+
+	c = focustop(selmon);
+	ws = (c && c->ws) ? c->ws : selmon->active_workspace;
+	if (ws && ws->root) {
+		tree_equalize_node(ws->root);
 		arrange(selmon);
+	}
+}
+
+static void
+adjust_node_ratio(Node *target, Node *prev, Node *next, int dir, int is_horiz, float delta)
+{
+	float min_weight = 0.15f;
+	float act_d;
+
+	if (!target)
+		return;
+
+	if (is_horiz) {
+		if (dir == WLR_DIRECTION_LEFT) {
+			if (prev) {
+				float cur_w = prev->ratio_h;
+				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
+				if (act_d > 0.001f) {
+					prev->ratio_h -= act_d;
+					target->ratio_h += act_d;
+				}
+			} else if (next) {
+				float cur_w = target->ratio_h;
+				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
+				if (act_d > 0.001f) {
+					target->ratio_h -= act_d;
+					next->ratio_h += act_d;
+				}
+			} else {
+				target->ratio_h -= delta;
+			}
+		} else if (dir == WLR_DIRECTION_RIGHT) {
+			if (next) {
+				float cur_w = next->ratio_h;
+				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
+				if (act_d > 0.001f) {
+					next->ratio_h -= act_d;
+					target->ratio_h += act_d;
+				}
+			} else if (prev) {
+				float cur_w = target->ratio_h;
+				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
+				if (act_d > 0.001f) {
+					target->ratio_h -= act_d;
+					prev->ratio_h += act_d;
+				}
+			} else {
+				target->ratio_h += delta;
+			}
+		}
+	} else {
+		if (dir == WLR_DIRECTION_UP) {
+			if (prev) {
+				float cur_w = prev->ratio_v;
+				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
+				if (act_d > 0.001f) {
+					prev->ratio_v -= act_d;
+					target->ratio_v += act_d;
+				}
+			} else if (next) {
+				float cur_w = target->ratio_v;
+				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
+				if (act_d > 0.001f) {
+					target->ratio_v -= act_d;
+					next->ratio_v += act_d;
+				}
+			} else {
+				target->ratio_v -= delta;
+			}
+		} else if (dir == WLR_DIRECTION_DOWN) {
+			if (next) {
+				float cur_w = next->ratio_v;
+				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
+				if (act_d > 0.001f) {
+					next->ratio_v -= act_d;
+					target->ratio_v += act_d;
+				}
+			} else if (prev) {
+				float cur_w = target->ratio_v;
+				act_d = MIN(delta, MAX(0.0f, cur_w - min_weight));
+				if (act_d > 0.001f) {
+					target->ratio_v -= act_d;
+					prev->ratio_v += act_d;
+				}
+			} else {
+				target->ratio_v += delta;
+			}
+		}
+	}
+
+	target->ratio_h = clamp_ratio(target->ratio_h);
+	target->ratio_v = clamp_ratio(target->ratio_v);
+	if (prev) {
+		prev->ratio_h = clamp_ratio(prev->ratio_h);
+		prev->ratio_v = clamp_ratio(prev->ratio_v);
+	}
+	if (next) {
+		next->ratio_h = clamp_ratio(next->ratio_h);
+		next->ratio_v = clamp_ratio(next->ratio_v);
 	}
 }
 
@@ -477,14 +586,33 @@ void
 tree_resize_active(const Arg *arg)
 {
 	Client *sel;
+	Workspace *ws;
+	const Layout *lt;
 
-	if (!selmon || !arg || !selmon->active_workspace)
+	if (!selmon || !arg)
 		return;
 
 	sel = focustop(selmon);
-	if (sel && sel->node) {
+	if (!sel)
+		return;
+
+	ws = sel->ws ? sel->ws : selmon->active_workspace;
+	lt = (ws && ws->layout) ? ws->layout : selmon->lt[selmon->sellt];
+
+	if (sel->isfloating) {
+		struct wlr_box g = sel->geom;
+		int step = (int)(arg->f * 100.0f);
+		if (step == 0)
+			step = (arg->f > 0) ? 50 : -50;
+		g.width = MAX((int)min_width, g.width + step);
+		g.height = MAX((int)min_height, g.height + step);
+		resize(sel, g, 1);
+		return;
+	}
+
+	if (sel->node) {
 		tree_resize_node(sel->node, arg->f);
-		if (selmon->lt[selmon->sellt]->arrange == tile || selmon->lt[selmon->sellt]->arrange == master_stack) {
+		if (lt && (lt->arrange == tile || lt->arrange == master_stack)) {
 			float f = selmon->mfact + arg->f;
 			if (f >= 0.1f && f <= 0.9f)
 				selmon->mfact = f;
@@ -497,15 +625,12 @@ void
 tree_resize_dir(const Arg *arg)
 {
 	Client *sel;
-	float delta = 0.05f, f;
-	Node *target_node = NULL;
-	Node *curr;
+	float delta = 0.15f;
 	int dir, is_horiz;
-	int is_right_half = 0, is_bottom_half = 0;
-	struct wlr_box ref_box;
-	double cx, cy;
+	const Layout *lt;
+	Workspace *ws;
 
-	if (!selmon || !arg || !selmon->active_workspace)
+	if (!selmon || !arg)
 		return;
 
 	sel = focustop(selmon);
@@ -513,20 +638,20 @@ tree_resize_dir(const Arg *arg)
 		return;
 
 	if (sel->isfloating) {
-		int step = 40;
+		int step = 100;
 		struct wlr_box g = sel->geom;
 		switch (arg->i) {
 		case WLR_DIRECTION_RIGHT:
 			g.width += step;
 			break;
 		case WLR_DIRECTION_LEFT:
-			g.width = MAX(100, g.width - step);
+			g.width = MAX((int)min_width, g.width - step);
 			break;
 		case WLR_DIRECTION_DOWN:
 			g.height += step;
 			break;
 		case WLR_DIRECTION_UP:
-			g.height = MAX(100, g.height - step);
+			g.height = MAX((int)min_height, g.height - step);
 			break;
 		}
 		resize(sel, g, 1);
@@ -538,8 +663,17 @@ tree_resize_dir(const Arg *arg)
 
 	dir = arg->i;
 	is_horiz = (dir == WLR_DIRECTION_LEFT || dir == WLR_DIRECTION_RIGHT);
+	ws = sel->ws ? sel->ws : selmon->active_workspace;
+	lt = (ws && ws->layout) ? ws->layout : selmon->lt[selmon->sellt];
 
-	if (selmon->lt[selmon->sellt]->arrange == tree_layout) {
+	if (lt && lt->arrange == monocle)
+		return;
+
+	/* 1. Handling tree_layout & bsp_layout */
+	if (lt && (lt->arrange == tree_layout || lt->arrange == bsp_layout)) {
+		Node *target_node = NULL, *curr, *parent = NULL;
+		Node *prev_sub = NULL, *next_sub = NULL;
+
 		for (curr = sel->node; curr; curr = curr->parent) {
 			if (curr->parent && curr->parent->split_type != SPLIT_NONE) {
 				if ((is_horiz && curr->parent->split_type == SPLIT_HORIZONTAL) ||
@@ -549,51 +683,72 @@ tree_resize_dir(const Arg *arg)
 				}
 			}
 		}
-	}
+		if (!target_node)
+			target_node = sel->node;
 
-	if (!target_node)
-		target_node = sel->node;
+		parent = target_node->parent;
+		if (parent) {
+			if (target_node->link.prev != &parent->children)
+				prev_sub = wl_container_of(target_node->link.prev, prev_sub, link);
+			if (target_node->link.next != &parent->children)
+				next_sub = wl_container_of(target_node->link.next, next_sub, link);
 
-	ref_box = (target_node->parent && target_node->parent->type != NODE_ROOT && target_node->parent->geom.width > 0)
-		? target_node->parent->geom
-		: selmon->w;
-
-	cx = (target_node->geom.width > 0)
-		? (target_node->geom.x + target_node->geom.width / 2.0)
-		: (sel->geom.x + sel->geom.width / 2.0);
-	cy = (target_node->geom.height > 0)
-		? (target_node->geom.y + target_node->geom.height / 2.0)
-		: (sel->geom.y + sel->geom.height / 2.0);
-
-	is_right_half = (cx > (ref_box.x + ref_box.width / 2.0));
-	is_bottom_half = (cy > (ref_box.y + ref_box.height / 2.0));
-
-	if (is_horiz) {
-		if (dir == WLR_DIRECTION_LEFT)
-			target_node->ratio_h += is_right_half ? delta : -delta;
-		else
-			target_node->ratio_h += is_right_half ? -delta : delta;
-
-		target_node->ratio_h = clamp_ratio(target_node->ratio_h);
-
-		if (selmon->lt[selmon->sellt]->arrange == tile || selmon->lt[selmon->sellt]->arrange == master_stack) {
-			if (dir == WLR_DIRECTION_RIGHT)
-				f = selmon->mfact + delta;
-			else
-				f = selmon->mfact - delta;
-
-			if (f >= 0.1f && f <= 0.9f)
-				selmon->mfact = f;
+			adjust_node_ratio(target_node, prev_sub, next_sub, dir, is_horiz, delta);
+			arrange(selmon);
 		}
-	} else {
-		if (dir == WLR_DIRECTION_UP)
-			target_node->ratio_v += is_bottom_half ? delta : -delta;
-		else
-			target_node->ratio_v += is_bottom_half ? -delta : delta;
-
-		target_node->ratio_v = clamp_ratio(target_node->ratio_v);
+		return;
 	}
 
+	/* 2. Handling flat workspace leaf layouts (tile, master_stack, columns, dwindle, spiral) */
+	Client *leaves[128];
+	int n = node_collect_leaves(ws ? ws->root : NULL, leaves, 128);
+	if (n <= 1)
+		return;
+
+	int idx = -1;
+	for (int i = 0; i < n; i++) {
+		if (leaves[i] == sel) {
+			idx = i;
+			break;
+		}
+	}
+	if (idx < 0)
+		return;
+
+	if (lt && (lt->arrange == tile || lt->arrange == master_stack)) {
+		if (is_horiz) {
+			if (dir == WLR_DIRECTION_RIGHT)
+				selmon->mfact = MIN(0.9f, selmon->mfact + delta);
+			else
+				selmon->mfact = MAX(0.1f, selmon->mfact - delta);
+		} else {
+			int nm = MIN(n, selmon->nmaster);
+			Node *target_node = sel->node;
+			Node *prev_node = NULL, *next_node = NULL;
+
+			if (idx < nm) { /* In Master Column */
+				if (idx > 0 && leaves[idx - 1]->node)
+					prev_node = leaves[idx - 1]->node;
+				if (idx < nm - 1 && leaves[idx + 1]->node)
+					next_node = leaves[idx + 1]->node;
+			} else { /* In Stack Column */
+				if (idx > nm && leaves[idx - 1]->node)
+					prev_node = leaves[idx - 1]->node;
+				if (idx < n - 1 && leaves[idx + 1]->node)
+					next_node = leaves[idx + 1]->node;
+			}
+			adjust_node_ratio(target_node, prev_node, next_node, dir, is_horiz, delta);
+		}
+		arrange(selmon);
+		return;
+	}
+
+	/* columns, dwindle, spiral layouts */
+	Node *target_node = sel->node;
+	Node *prev_node = (idx > 0 && leaves[idx - 1]->node) ? leaves[idx - 1]->node : NULL;
+	Node *next_node = (idx < n - 1 && leaves[idx + 1]->node) ? leaves[idx + 1]->node : NULL;
+
+	adjust_node_ratio(target_node, prev_node, next_node, dir, is_horiz, delta);
 	arrange(selmon);
 }
 
@@ -605,7 +760,7 @@ tree_swap_dir(const Arg *arg)
 	double min_dist = 1e18;
 	int dir;
 
-	if (!selmon || !arg || !selmon->active_workspace)
+	if (!selmon || !arg)
 		return;
 
 	if (!(c = focustop(selmon)))
@@ -618,7 +773,7 @@ tree_swap_dir(const Arg *arg)
 	wl_list_for_each(tc, &clients, link) {
 		double dist;
 
-		if (tc == c || !VISIBLEON(tc, selmon) || tc->isfloating)
+		if (tc == c || !VISIBLEON(tc, selmon) || tc->isfloating || tc->ws != c->ws)
 			continue;
 
 		tx = tc->geom.x + tc->geom.width / 2.0;
@@ -644,8 +799,14 @@ tree_swap_dir(const Arg *arg)
 void
 tree_set_split_type(const Arg *arg)
 {
-	if (!selmon || !selmon->active_workspace || !arg)
+	Client *c;
+	Workspace *ws;
+
+	if (!selmon || !arg)
 		return;
 
-	selmon->active_workspace->next_split = (SplitType)arg->i;
+	c = focustop(selmon);
+	ws = (c && c->ws) ? c->ws : selmon->active_workspace;
+	if (ws)
+		ws->next_split = (SplitType)arg->i;
 }

@@ -39,6 +39,7 @@ createmon(struct wl_listener *listener, void *data)
 	m = wlr_output->data = ecalloc(1, sizeof(*m));
 	m->wlr_output = wlr_output;
 	wl_list_init(&m->workspaces);
+	workspace_create(m, SCRATCHPAD_WORKSPACE, "0");
 	for (i = 1; i <= 9; i++) {
 		workspace_create(m, (int)i, NULL);
 	}

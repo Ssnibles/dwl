@@ -7,6 +7,7 @@
 #include "dwl.h"
 
 void arrange(Monitor *m);
+void arrange_workspace(Monitor *m, Workspace *ws, struct wlr_box box, const Layout *lt);
 void tree_layout(Monitor *m);
 void bsp_layout(Monitor *m);
 void dwindle(Monitor *m);
