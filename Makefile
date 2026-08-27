@@ -48,8 +48,8 @@ util.o: util.c util.h
 rules.o: rules.c rules.h dwl.h client.h include/config.h
 layout.o: layout.c layout.h tree.h workspace.h dwl.h client.h include/config.h
 output.o: output.c output/output.h layers.h tree.h workspace.h dwl.h client.h include/config.h
-tree.o: tree.c tree.h dwl.h client.h layout.h util.h
-workspace.o: workspace.c workspace.h tree.h dwl.h client.h layout.h util.h
+tree.o: tree.c tree/tree.h dwl.h client.h layout.h util.h
+workspace.o: workspace.c tree/workspace.h tree/tree.h dwl.h client.h layout.h util.h
 
 # wayland-scanner is a tool which generates C headers and rigging for Wayland
 # protocols, which are specified in XML. wlroots requires you to rig these up
