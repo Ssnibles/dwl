@@ -6,6 +6,7 @@
 
 /* appearance */
 static const int sloppyfocus               = 1;  /* focus follows mouse */
+static const int warpcursor                = 1;  /* warp cursor to center of window when focused via binds */
 static const int bypass_surface_visibility = 0;  /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */
 static const unsigned int borderpx         = 2;  /* border pixel of windows */
 static const unsigned int gappx            = 8;  /* margin/gap pixel around/between windows */
@@ -169,6 +170,15 @@ static const Key keys[] = {
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_7,           move_to_workspace, {.i = 7} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_8,           move_to_workspace, {.i = 8} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_9,           move_to_workspace, {.i = 9} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_exclam,      move_to_workspace, {.i = 1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_at,          move_to_workspace, {.i = 2} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_numbersign,  move_to_workspace, {.i = 3} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_dollar,      move_to_workspace, {.i = 4} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_percent,     move_to_workspace, {.i = 5} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_asciicircum, move_to_workspace, {.i = 6} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_ampersand,   move_to_workspace, {.i = 7} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_asterisk,    move_to_workspace, {.i = 8} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_parenleft,   move_to_workspace, {.i = 9} },
 
 	/* Monitor Focus (Vim & Arrow keys) */
 	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_h,           focusmon,         {.i = WLR_DIRECTION_LEFT} },

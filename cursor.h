@@ -10,6 +10,8 @@
 
 #include "dwl.h"
 
+extern int in_pointer_focus;
+
 void axisnotify(struct wl_listener *listener, void *data);
 void buttonpress(struct wl_listener *listener, void *data);
 void cursorconstrain(struct wlr_pointer_constraint_v1 *constraint);
@@ -21,5 +23,6 @@ void motionrelative(struct wl_listener *listener, void *data);
 void moveresize(const Arg *arg);
 void setcursor(struct wl_listener *listener, void *data);
 void setcursorshape(struct wl_listener *listener, void *data);
+void warptocenter(Client *c);
 
 #endif /* CURSOR_H */

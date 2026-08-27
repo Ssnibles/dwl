@@ -216,6 +216,8 @@ struct Monitor {
 	char ltsymbol[16];
 	int asleep;
 	int isoverview;
+	Client *overview_prev_client;
+	Workspace *overview_prev_ws;
 	struct wl_list workspaces; /* List of Workspace structs */
 	Workspace *active_workspace;
 };

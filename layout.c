@@ -633,10 +633,13 @@ toggleoverview(const Arg *arg)
 			if (c->mon == selmon)
 				c->prev = c->geom;
 		}
+		selmon->overview_prev_client = focustop(selmon);
+		selmon->overview_prev_ws = selmon->active_workspace;
 		selmon->isoverview = 1;
 		focusclient(focustop(selmon), 1);
 	} else {
-		Client *sel = focustop(selmon);
+		int confirm = (arg && arg->i == 1);
+		Client *sel = confirm ? focustop(selmon) : selmon->overview_prev_client;
 		clearlabeloverlays(selmon);
 		selmon->isoverview = 0;
 
@@ -645,15 +648,27 @@ toggleoverview(const Arg *arg)
 				resize(c, c->prev, 0);
 		}
 
-		if (sel) {
-			if (sel->ws && sel->mon && sel->mon->active_workspace != sel->ws)
-				selmon->active_workspace = sel->ws;
+		if (!confirm && selmon->overview_prev_ws) {
+			selmon->active_workspace = selmon->overview_prev_ws;
+		}
+
+		if (confirm && sel && sel->ws && sel->mon && sel->mon->active_workspace != sel->ws) {
+			selmon->active_workspace = sel->ws;
+		}
+
+		if (sel && sel->mon == selmon) {
 			wlr_cursor_warp_closest(cursor, NULL,
 					sel->geom.x + sel->geom.width / 2,
 					sel->geom.y + sel->geom.height / 2);
 		}
 		focusclient(NULL, 0);
-		focusclient(sel, 1);
+		if (sel && sel->mon == selmon)
+			focusclient(sel, 1);
+		else
+			focusclient(focustop(selmon), 1);
+
+		selmon->overview_prev_client = NULL;
+		selmon->overview_prev_ws = NULL;
 	}
 
 	arrange(selmon);

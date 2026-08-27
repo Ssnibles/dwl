@@ -25,6 +25,8 @@
 static int grabc_was_tiled;
 static struct wlr_box grabc_start_geom;
 
+int in_pointer_focus = 0;
+
 void
 axisnotify(struct wl_listener *listener, void *data)
 {
@@ -49,6 +51,8 @@ buttonpress(struct wl_listener *listener, void *data)
 	Client *c;
 	const Button *b;
 
+	in_pointer_focus = 1;
+
 	wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
 
 	switch (event->state) {
@@ -62,9 +66,11 @@ buttonpress(struct wl_listener *listener, void *data)
 
 		/* Change focus if the button was _pressed_ over a client */
 		xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
-		if (selmon && selmon->isoverview && c) {
-			focusclient(c, 1);
-			toggleoverview(NULL);
+		if (selmon && selmon->isoverview) {
+			if (c)
+				focusclient(c, 1);
+			toggleoverview(&(Arg){.i = c ? 1 : 0});
+			in_pointer_focus = 0;
 			return;
 		}
 
@@ -77,6 +83,7 @@ buttonpress(struct wl_listener *listener, void *data)
 			if (CLEANMASK(mods) == CLEANMASK(b->mod) &&
 					event->button == b->button && b->func) {
 				b->func(&b->arg);
+				in_pointer_focus = 0;
 				return;
 			}
 		}
@@ -158,6 +165,7 @@ buttonpress(struct wl_listener *listener, void *data)
 				}
 			}
 			grabc = NULL;
+			in_pointer_focus = 0;
 			return;
 		}
 		cursor_mode = CurNormal;
@@ -167,6 +175,7 @@ buttonpress(struct wl_listener *listener, void *data)
 	 * pointer focus that a button press has occurred */
 	wlr_seat_pointer_notify_button(seat,
 			event->time_msec, event->button, event->state);
+	in_pointer_focus = 0;
 }
 
 void
@@ -208,6 +217,17 @@ cursorwarptohint(void)
 }
 
 void
+warptocenter(Client *c)
+{
+	if (!c)
+		return;
+	wlr_cursor_warp_closest(cursor, NULL,
+			c->geom.x + c->geom.width / 2.0,
+			c->geom.y + c->geom.height / 2.0);
+	motionnotify(0, NULL, 0, 0, 0, 0);
+}
+
+void
 motionabsolute(struct wl_listener *listener, void *data)
 {
 	/* This event is forwarded by the cursor when a pointer emits an _absolute_
@@ -236,6 +256,8 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 	LayerSurface *l = NULL;
 	struct wlr_surface *surface = NULL;
 	struct wlr_pointer_constraint_v1 *constraint;
+
+	in_pointer_focus = 1;
 
 	/* Find the client under the pointer and send the event along. */
 	xytonode(cursor->x, cursor->y, &surface, &c, NULL, &sx, &sy);
@@ -269,8 +291,10 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 					dy = sy_confined - sy;
 				}
 
-				if (active_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED)
+				if (active_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
+					in_pointer_focus = 0;
 					return;
+				}
 			}
 		}
 
@@ -290,10 +314,12 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 		/* Move the grabbed client to the new position. */
 		resize(grabc, (struct wlr_box){.x = (int)round(cursor->x) - grabcx, .y = (int)round(cursor->y) - grabcy,
 			.width = grabc->geom.width, .height = grabc->geom.height}, 1);
+		in_pointer_focus = 0;
 		return;
 	} else if (cursor_mode == CurResize) {
 		resize(grabc, (struct wlr_box){.x = grabc->geom.x, .y = grabc->geom.y,
 			.width = (int)round(cursor->x) - grabc->geom.x, .height = (int)round(cursor->y) - grabc->geom.y}, 1);
+		in_pointer_focus = 0;
 		return;
 	}
 
@@ -307,6 +333,7 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 		focusclient(c, 0);
 
 	pointerfocus(c, surface, sx, sy, time);
+	in_pointer_focus = 0;
 }
 
 void

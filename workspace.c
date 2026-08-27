@@ -109,7 +109,8 @@ client_move_to_workspace(Client *c, Workspace *ws)
 		setmon(c, ws->mon);
 
 	c->ws = ws;
-	node_insert_client(ws, c);
+	if (!c->isfloating)
+		node_insert_client(ws, c);
 
 	/* Visibility check */
 	if (ws == ws->mon->active_workspace) {
@@ -123,6 +124,8 @@ client_move_to_workspace(Client *c, Workspace *ws)
 	if (old_mon != ws->mon)
 		arrange(old_mon);
 	arrange(ws->mon);
+
+	focusclient(focustop(selmon), 1);
 	printstatus();
 }
 

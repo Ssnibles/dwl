@@ -80,6 +80,14 @@ destroykeyboardgroup(struct wl_listener *listener, void *data)
 	free(group);
 }
 
+static inline int
+is_modifier_keysym(xkb_keysym_t sym)
+{
+	return (sym >= XKB_KEY_Shift_L && sym <= XKB_KEY_Hyper_R)
+		|| sym == XKB_KEY_ISO_Level3_Shift || sym == XKB_KEY_ISO_Level5_Shift
+		|| sym == XKB_KEY_Mode_switch;
+}
+
 int
 keybinding(uint32_t mods, xkb_keysym_t sym)
 {
@@ -96,8 +104,12 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 
 	/* Handle ESC / Return / Jump Labels in Overview Mode */
 	if (selmon && selmon->isoverview) {
-		if (sym == XKB_KEY_Escape || sym == XKB_KEY_Return) {
-			toggleoverview(NULL);
+		if (sym == XKB_KEY_Escape) {
+			toggleoverview(&(Arg){.i = 0});
+			return 1;
+		}
+		if (sym == XKB_KEY_Return) {
+			toggleoverview(&(Arg){.i = 1});
 			return 1;
 		}
 
@@ -119,7 +131,7 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 			wl_list_for_each(tc, &clients, link) {
 				if (tc->mon == selmon && tc->label == target_label) {
 					focusclient(tc, 1);
-					toggleoverview(NULL);
+					toggleoverview(&(Arg){.i = 1});
 					return 1;
 				}
 			}
@@ -134,15 +146,13 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 			return 1;
 		}
 	}
-	return 0;
-}
 
-static inline int
-is_modifier_keysym(xkb_keysym_t sym)
-{
-	return (sym >= XKB_KEY_Shift_L && sym <= XKB_KEY_Hyper_R)
-		|| sym == XKB_KEY_ISO_Level3_Shift || sym == XKB_KEY_ISO_Level5_Shift
-		|| sym == XKB_KEY_Mode_switch;
+	if (selmon && selmon->isoverview && !is_modifier_keysym(sym)) {
+		toggleoverview(&(Arg){.i = 0});
+		return 1;
+	}
+
+	return 0;
 }
 
 void
@@ -171,6 +181,15 @@ keypress(struct wl_listener *listener, void *data)
 	if (!locked && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 		for (i = 0; i < nsyms; i++)
 			handled = keybinding(mods, syms[i]) || handled;
+		if (!handled && (mods & WLR_MODIFIER_SHIFT) && group->wlr_group->keyboard.keymap) {
+			xkb_layout_index_t layout = xkb_state_key_get_layout(
+					group->wlr_group->keyboard.xkb_state, keycode);
+			const xkb_keysym_t *unshifted_syms;
+			int n_unshifted = xkb_keymap_key_get_syms_by_level(
+					group->wlr_group->keyboard.keymap, keycode, layout, 0, &unshifted_syms);
+			for (i = 0; i < n_unshifted; i++)
+				handled = keybinding(mods, unshifted_syms[i]) || handled;
+		}
 		if (!handled && nsyms > 0 && !is_modifier_keysym(syms[0]))
 			wlr_cursor_unset_image(cursor);
 	}

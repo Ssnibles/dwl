@@ -662,6 +662,9 @@ focusclient(Client *c, int lift)
 		}
 	}
 
+	if (c && warpcursor && !in_pointer_focus && !client_is_unmanaged(c))
+		warptocenter(c);
+
 	if (c && client_surface(c) == old)
 		return;
 
@@ -898,10 +901,12 @@ mapnotify(struct wl_listener *listener, void *data)
 	} else {
 		applyrules(c);
 	}
+	if (c->mon && c->mon->active_workspace)
+		c->ws = c->mon->active_workspace;
+
 	if (c->isfloating)
 		resize(c, c->geom, 1);
-	else if (c->mon && c->mon->active_workspace) {
-		c->ws = c->mon->active_workspace;
+	else if (c->ws) {
 		node_insert_client(c->ws, c);
 		arrange(c->mon);
 	}
@@ -1213,9 +1218,10 @@ setmon(Client *c, Monitor *m)
 	c->mon = m;
 	c->prev = c->geom;
 
-	if (m && !c->isfloating) {
+	if (m) {
 		c->ws = m->active_workspace;
-		node_insert_client(c->ws, c);
+		if (!c->isfloating)
+			node_insert_client(c->ws, c);
 	}
 
 	/* Scene graph sends surface leave/enter events on move and resize */
@@ -1537,9 +1543,15 @@ unmapnotify(struct wl_listener *listener, void *data)
 {
 	/* Called when the surface is unmapped, and should no longer be shown. */
 	Client *c = wl_container_of(listener, c, unmap);
+	Monitor *m_iter;
 	if (c == grabc) {
 		cursor_mode = CurNormal;
 		grabc = NULL;
+	}
+
+	wl_list_for_each(m_iter, &mons, link) {
+		if (m_iter->overview_prev_client == c)
+			m_iter->overview_prev_client = NULL;
 	}
 
 	if (client_is_unmanaged(c)) {
