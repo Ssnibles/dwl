@@ -28,29 +28,26 @@ createmon(struct wl_listener *listener, void *data)
 	/* This event is raised by the backend when a new output (aka a display or
 	 * monitor) becomes available. */
 	struct wlr_output *wlr_output = data;
-	const MonitorRule *r;
-	size_t i;
 	struct wlr_output_state state;
-	Monitor *m;
 
 	if (!wlr_output_init_render(wlr_output, alloc, drw))
 		return;
 
-	m = wlr_output->data = ecalloc(1, sizeof(*m));
+	Monitor *m = wlr_output->data = ecalloc(1, sizeof(*m));
 	m->wlr_output = wlr_output;
 	wl_list_init(&m->workspaces);
 	workspace_create(m, SCRATCHPAD_WORKSPACE, "0");
-	for (i = 1; i <= 9; i++) {
+	for (size_t i = 1; i <= 9; i++) {
 		workspace_create(m, (int)i, NULL);
 	}
 	m->active_workspace = workspace_get_by_id(m, 1);
 
-	for (i = 0; i < LENGTH(m->layers); i++)
+	for (size_t i = 0; i < LENGTH(m->layers); i++)
 		wl_list_init(&m->layers[i]);
 
 	wlr_output_state_init(&state);
 	/* Initialize monitor state using configured rules */
-	for (r = monrules; r < END(monrules); r++) {
+	for (const MonitorRule *r = monrules; r < END(monrules); r++) {
 		if (!r->name || strstr(wlr_output->name, r->name)) {
 			m->m.x = r->x;
 			m->m.y = r->y;
@@ -94,6 +91,9 @@ createmon(struct wl_listener *listener, void *data)
 	/* updatemons() will resize and set correct position */
 	m->fullscreen_bg = wlr_scene_rect_create(layers[LyrFS], 0, 0, fullscreen_bg);
 	wlr_scene_node_set_enabled(&m->fullscreen_bg->node, 0);
+
+	m->scratchpad_bg = wlr_scene_rect_create(layers[LyrFloat], 0, 0, scratchpad_bg);
+	wlr_scene_node_set_enabled(&m->scratchpad_bg->node, 0);
 
 	/* Adds this to the output layout in the order it was configured.
 	 *
@@ -140,6 +140,7 @@ cleanupmon(struct wl_listener *listener, void *data)
 	}
 	m->active_workspace = NULL;
 	wlr_scene_node_destroy(&m->fullscreen_bg->node);
+	wlr_scene_node_destroy(&m->scratchpad_bg->node);
 	free(m);
 }
 
@@ -228,6 +229,9 @@ updatemons(struct wl_listener *listener, void *data)
 
 		wlr_scene_node_set_position(&m->fullscreen_bg->node, m->m.x, m->m.y);
 		wlr_scene_rect_set_size(m->fullscreen_bg, m->m.width, m->m.height);
+
+		wlr_scene_node_set_position(&m->scratchpad_bg->node, m->m.x, m->m.y);
+		wlr_scene_rect_set_size(m->scratchpad_bg, m->m.width, m->m.height);
 
 		if (m->lock_surface) {
 			struct wlr_scene_tree *scene_tree = m->lock_surface->surface->data;

@@ -20,7 +20,6 @@
 #include "layout.h"
 #include "client.h"
 #include "config.h"
-#include "tree.h"
 
 typedef enum {
 	SNAP_NONE = 0,
@@ -54,6 +53,30 @@ destroy_snap_overlay(void)
 	}
 	active_snap_type = SNAP_NONE;
 	active_snap_target = NULL;
+}
+
+static inline void
+client_list_swap(Client *a, Client *b)
+{
+	struct wl_list *a_prev, *b_prev;
+
+	if (!a || !b || a == b)
+		return;
+
+	if (a->link.next == &b->link) {
+		wl_list_remove(&a->link);
+		wl_list_insert(&b->link, &a->link);
+	} else if (b->link.next == &a->link) {
+		wl_list_remove(&b->link);
+		wl_list_insert(&a->link, &b->link);
+	} else {
+		a_prev = a->link.prev;
+		b_prev = b->link.prev;
+		wl_list_remove(&a->link);
+		wl_list_remove(&b->link);
+		wl_list_insert(b_prev, &a->link);
+		wl_list_insert(a_prev, &b->link);
+	}
 }
 
 static void
@@ -91,7 +114,7 @@ update_snap_overlay(struct wlr_box box, SnapTargetType type)
 
 	wlr_scene_node_set_position(&snap_overlay_tree->node, box.x, box.y);
 	wlr_scene_node_set_enabled(&snap_overlay_tree->node, true);
-	if (grabc && grabc->scene)
+	if (grabc && grabc->scene && snap_overlay_tree->node.parent == grabc->scene->node.parent)
 		wlr_scene_node_place_below(&snap_overlay_tree->node, &grabc->scene->node);
 	else
 		wlr_scene_node_raise_to_top(&snap_overlay_tree->node);
@@ -181,50 +204,18 @@ buttonpress(struct wl_listener *listener, void *data)
 				}
 				if (was_move && grabc_was_tiled && active_snap_target && active_snap_type != SNAP_NONE) {
 					Client *at = active_snap_target;
-					Workspace *ws = grabc->ws ? grabc->ws : (grabc->mon ? grabc->mon->active_workspace : selmon->active_workspace);
 
 					if (active_snap_type == SNAP_CENTER) {
-						/* Center Zone: SWAP windows */
-						if (grabc->node && at->node) {
-							tree_swap_nodes(grabc->node, at->node);
-						}
-						/* Re-order client list to reflect swap */
-						wl_list_remove(&grabc->link);
-						wl_list_insert(&at->link, &grabc->link);
+						/* Center Zone: SWAP windows in client list */
+						client_list_swap(grabc, at);
 					} else {
-						/* Edge Zones: SPLIT/INSERT window */
-						int dir = WLR_DIRECTION_RIGHT;
-						int before = 0;
-
-						switch (active_snap_type) {
-						case SNAP_LEFT:
-							dir = WLR_DIRECTION_LEFT;
-							before = 1;
-							break;
-						case SNAP_RIGHT:
-							dir = WLR_DIRECTION_RIGHT;
-							before = 0;
-							break;
-						case SNAP_TOP:
-							dir = WLR_DIRECTION_UP;
-							before = 1;
-							break;
-						case SNAP_BOTTOM:
-							dir = WLR_DIRECTION_DOWN;
-							before = 0;
-							break;
-						default:
-							break;
-						}
-
+						/* Edge Zones: INSERT window before/after target in client list */
+						int before = (active_snap_type == SNAP_LEFT || active_snap_type == SNAP_TOP);
 						wl_list_remove(&grabc->link);
 						if (before)
 							wl_list_insert(at->link.prev, &grabc->link);
 						else
 							wl_list_insert(&at->link, &grabc->link);
-
-						if (ws)
-							node_insert_client_at(ws, grabc, at, dir);
 					}
 					setfloating(grabc, 0);
 					arrange(selmon);
@@ -239,8 +230,6 @@ buttonpress(struct wl_listener *listener, void *data)
 			in_pointer_focus = 0;
 			return;
 		}
-		if (cursor_mode == CurResize)
-			tree_mouse_resize_end();
 		cursor_mode = CurNormal;
 		break;
 	}
@@ -530,8 +519,12 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 			}
 
 			resize(grabc, (struct wlr_box){.x = new_x, .y = new_y, .width = new_w, .height = new_h}, 1);
-		} else if (grabc->node) {
-			tree_mouse_resize(grabc, cursor->x, cursor->y);
+		} else if (grabc && grabc->mon && grabc->mon->lt[grabc->mon->sellt]->arrange) {
+			float new_mfact = (float)(cursor->x - grabc->mon->w.x) / (float)grabc->mon->w.width;
+			if (new_mfact >= 0.05f && new_mfact <= 0.95f) {
+				grabc->mon->mfact = new_mfact;
+				arrange(grabc->mon);
+			}
 		}
 
 		in_pointer_focus = 0;
@@ -670,8 +663,6 @@ moveresize(const Arg *arg)
 		}
 
 		wlr_cursor_set_xcursor(cursor, cursor_mgr, cursor_icon);
-		if (!grabc->isfloating && grabc->node)
-			tree_mouse_resize_start(grabc, grabc_edges, cursor->x, cursor->y);
 		break;
 	}
 }

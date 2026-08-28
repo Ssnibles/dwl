@@ -19,6 +19,7 @@ static const float focuscolor[]            = COLOR(0xa9b1d6ff);
 static const float urgentcolor[]           = COLOR(0xf7768eff);
 /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
 static const float fullscreen_bg[]         = {0.0f, 0.0f, 0.0f, 1.0f};
+static const float scratchpad_bg[]         = COLOR(0x00000066);
 
 /* Snap overlay colors */
 static const float snap_border_center[]    = COLOR(0xd93333bf);
@@ -37,12 +38,11 @@ static const Rule rules[] = {
 /* layout(s) */
 static const Layout layouts[] = {
 	/* symbol     arrange function */
-	{ "RT",       tree_layout },
+	{ "[\\]",     dwindle },
 	{ "[]=",      tile },
 	{ "><>",      NULL },
 	{ "[M]",      monocle },
-	{ "[\\]",     dwindle },
-	{ "(@)",      spiral },
+	{ "|||",      columns },
 };
 
 /* monitors */
@@ -132,37 +132,18 @@ static const Key keys[] = {
 	{ MODKEY,                    XKB_KEY_Up,          focusdir,         {.i = WLR_DIRECTION_UP} },
 	{ MODKEY,                    XKB_KEY_Down,        focusdir,         {.i = WLR_DIRECTION_DOWN} },
 
-	/* Move / Swap Windows - Tree Swap */
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_h,           tree_swap_dir,     {.i = WLR_DIRECTION_LEFT} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_l,           tree_swap_dir,     {.i = WLR_DIRECTION_RIGHT} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_k,           tree_swap_dir,     {.i = WLR_DIRECTION_UP} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_j,           tree_swap_dir,     {.i = WLR_DIRECTION_DOWN} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Left,        tree_swap_dir,     {.i = WLR_DIRECTION_LEFT} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Right,       tree_swap_dir,     {.i = WLR_DIRECTION_RIGHT} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Up,          tree_swap_dir,     {.i = WLR_DIRECTION_UP} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Down,        tree_swap_dir,     {.i = WLR_DIRECTION_DOWN} },
-
-	/* Window Resizing - Tree Resizing */
-	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_h,           tree_resize_dir,     {.i = WLR_DIRECTION_LEFT} },
-	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_l,           tree_resize_dir,     {.i = WLR_DIRECTION_RIGHT} },
-	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_k,           tree_resize_dir,     {.i = WLR_DIRECTION_UP} },
-	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_j,           tree_resize_dir,     {.i = WLR_DIRECTION_DOWN} },
-	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_Left,        tree_resize_dir,     {.i = WLR_DIRECTION_LEFT} },
-	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_Right,       tree_resize_dir,     {.i = WLR_DIRECTION_RIGHT} },
-	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_Up,          tree_resize_dir,     {.i = WLR_DIRECTION_UP} },
-	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_Down,        tree_resize_dir,     {.i = WLR_DIRECTION_DOWN} },
-	{ MODKEY,                    XKB_KEY_equal,       tree_resize_active,  {.f = +0.15f} },
-	{ MODKEY,                    XKB_KEY_minus,       tree_resize_active,  {.f = -0.15f} },
-
-	/* Tree Split Type & Equalization */
-	{ MODKEY,                    XKB_KEY_b,           tree_set_split_type, {.i = SPLIT_HORIZONTAL} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_B,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_v,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_V,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
-	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_b,           tree_set_split_type, {.i = SPLIT_HORIZONTAL} },
-	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_v,           tree_set_split_type, {.i = SPLIT_VERTICAL} },
-	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_e,           tree_equalize_active,  {0} },
+	/* Master / Fact & Window Stack Controls */
+	{ MODKEY,                    XKB_KEY_equal,       setmfact,         {.f = +0.05f} },
+	{ MODKEY,                    XKB_KEY_minus,       setmfact,         {.f = -0.05f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_h,           setmfact,         {.f = -0.05f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_l,           setmfact,         {.f = +0.05f} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_j,           movestack,        {.i = +1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_k,           movestack,        {.i = -1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_h,           movestack,        {.i = -1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_l,           movestack,        {.i = +1} },
+	{ MODKEY,                    XKB_KEY_Return,      zoom,             {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_equal,       incnmaster,       {.i = +1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_minus,       incnmaster,       {.i = -1} },
 
 	/* Workspace Navigation */
 	{ MODKEY,                    XKB_KEY_1,           view_workspace,    {.i = 1} },
@@ -221,11 +202,10 @@ static const Key keys[] = {
 
 	/* Layout Controls */
 	{ MODKEY,                    XKB_KEY_o,           toggleoverview,   {0} },
-	{ MODKEY,                    XKB_KEY_t,           setlayout,        {.v = &layouts[0]} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           setlayout,        {.v = &layouts[1]} },
+	{ MODKEY,                    XKB_KEY_r,           setlayout,        {.v = &layouts[0]} },
+	{ MODKEY,                    XKB_KEY_t,           setlayout,        {.v = &layouts[1]} },
 	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts[3]} },
-	{ MODKEY,                    XKB_KEY_r,           setlayout,        {.v = &layouts[4]} },
-	{ MODKEY,                    XKB_KEY_s,           setlayout,        {.v = &layouts[5]} },
+	{ MODKEY,                    XKB_KEY_c,           setlayout,        {.v = &layouts[4]} },
 
 	/* Screenshots */
 	{ 0,                         XKB_KEY_Print,       spawn,            {.v = ss_crop} },

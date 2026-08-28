@@ -8,7 +8,6 @@
 
 #include "server.h"
 #include "dwl.h"
-#include "tree.h"
 #include "workspace.h"
 #include "rules.h"
 #include "layout.h"
@@ -75,9 +74,7 @@ arrangelayer(Monitor *m, struct wl_list *list, struct wlr_box *usable_area, int 
 void
 arrangelayers(Monitor *m)
 {
-	int i;
 	struct wlr_box usable_area = m->m;
-	LayerSurface *l;
 	uint32_t layers_above_shell[] = {
 		ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
 		ZWLR_LAYER_SHELL_V1_LAYER_TOP,
@@ -86,7 +83,7 @@ arrangelayers(Monitor *m)
 		return;
 
 	/* Arrange exclusive surfaces from top->bottom */
-	for (i = 3; i >= 0; i--)
+	for (int i = 3; i >= 0; i--)
 		arrangelayer(m, &m->layers[i], &usable_area, 1);
 
 	if (!wlr_box_equal(&usable_area, &m->w)) {
@@ -95,11 +92,12 @@ arrangelayers(Monitor *m)
 	}
 
 	/* Arrange non-exclusive surfaces from top->bottom */
-	for (i = 3; i >= 0; i--)
+	for (int i = 3; i >= 0; i--)
 		arrangelayer(m, &m->layers[i], &usable_area, 0);
 
 	/* Find topmost keyboard interactive layer, if such a layer exists */
-	for (i = 0; i < (int)LENGTH(layers_above_shell); i++) {
+	for (size_t i = 0; i < LENGTH(layers_above_shell); i++) {
+		LayerSurface *l;
 		wl_list_for_each_reverse(l, &m->layers[layers_above_shell[i]], link) {
 			if (locked || !l->layer_surface->current.keyboard_interactive || !l->mapped)
 				continue;

@@ -362,8 +362,6 @@ focusclient(Client *c, int lift)
 		wl_list_insert(&fstack, &c->flink);
 		selmon = c->mon;
 		c->isurgent = 0;
-		if (c->ws && c->node)
-			c->ws->focused_node = c->node;
 	}
 
 	/* Don't change border color if there is an exclusive focus or we are
@@ -598,10 +596,8 @@ mapnotify(struct wl_listener *listener, void *data)
 
 	if (c->isfloating)
 		resize(c, c->geom, 1);
-	else if (c->ws) {
-		node_insert_client(c->ws, c);
+	else
 		arrange(c->mon);
-	}
 	printstatus();
 
 unset_fullscreen:
@@ -702,19 +698,21 @@ resize(Client *c, struct wlr_box geo, int interact)
 	struct wlr_box *bbox;
 	struct wlr_box clip;
 	struct wlr_box surface_geom = {0};
+	struct wlr_box old_geom;
 	int radius, inner_radius;
 	int bw_w, bw_h;
+	int geom_changed;
 
 	if (!c->mon || !client_surface(c)->mapped)
 		return;
 
 	bbox = interact ? &sgeom : &c->mon->w;
 
-	struct wlr_box old_geom = c->geom;
+	old_geom = c->geom;
 	c->geom = geo;
 	applybounds(c, bbox);
 
-	int geom_changed = (c->geom.x != old_geom.x || c->geom.y != old_geom.y ||
+	geom_changed = (c->geom.x != old_geom.x || c->geom.y != old_geom.y ||
 			c->geom.width != old_geom.width || c->geom.height != old_geom.height);
 
 	if (geom_changed) {
@@ -725,8 +723,9 @@ resize(Client *c, struct wlr_box geo, int interact)
 		/* this is a no-op if size hasn't changed */
 		if (cursor_mode == CurResize && !c->isfloating) {
 			struct timespec now;
+			int64_t ms_diff;
 			clock_gettime(CLOCK_MONOTONIC, &now);
-			int64_t ms_diff = (now.tv_sec - c->last_resize_time.tv_sec) * 1000 +
+			ms_diff = (now.tv_sec - c->last_resize_time.tv_sec) * 1000 +
 					(now.tv_nsec - c->last_resize_time.tv_nsec) / 1000000;
 			if (ms_diff >= 8) {
 				c->resize = client_set_size(c, MAX(1, c->geom.width - 2 * (int)c->bw),
@@ -781,19 +780,14 @@ setfloating(Client *c, int floating)
 			: c->isfloating ? LyrFloat : LyrTile]);
 	if (c->isfloating && !was_floating) {
 		struct wlr_box geom;
-		if (c->node)
-			node_remove(c->node);
 		geom.width = (int)(c->mon->m.width * 0.60);
 		geom.height = (int)(c->mon->m.height * 0.60);
 		geom.x = c->mon->m.x + (c->mon->m.width - geom.width) / 2;
 		geom.y = c->mon->m.y + (c->mon->m.height - geom.height) / 2;
 		resize(c, geom, 0);
 	} else if (!c->isfloating && was_floating) {
-		if (c->ws)
-			node_insert_client(c->ws, c);
-		else if (c->mon && c->mon->active_workspace) {
+		if (!c->ws && c->mon && c->mon->active_workspace) {
 			c->ws = c->mon->active_workspace;
-			node_insert_client(c->ws, c);
 		}
 	}
 	arrange(c->mon);
@@ -831,17 +825,12 @@ setmon(Client *c, Monitor *m)
 	if (oldmon == m)
 		return;
 
-	if (oldmon && !c->isfloating && c->node)
-		node_remove(c->node);
-
 	c->mon = m;
 	c->prev = c->geom;
 
 	if (m) {
 		Client *sel = focustop(m);
 		c->ws = (sel && sel->ws) ? sel->ws : m->active_workspace;
-		if (!c->isfloating)
-			node_insert_client(c->ws, c);
 	}
 
 	/* Scene graph sends surface leave/enter events on move and resize */
@@ -959,13 +948,10 @@ unmapnotify(struct wl_listener *listener, void *data)
 		Monitor *m = c->mon;
 		Workspace *ws = c->ws;
 		Client *next_focus = NULL;
-		if (c->node)
-			node_remove(c->node);
 		wl_list_remove(&c->link);
 		wl_list_remove(&c->flink);
 		c->mon = NULL;
 		c->ws = NULL;
-		c->node = NULL;
 		if (m && ws && ws->id == SCRATCHPAD_WORKSPACE && m->scratchpad_showing) {
 			if (scratchpad_client_count(m) == 0)
 				m->scratchpad_showing = 0;
@@ -973,22 +959,7 @@ unmapnotify(struct wl_listener *listener, void *data)
 		if (m)
 			arrange(m);
 
-		if (ws && m && ws == m->active_workspace) {
-			if (ws->focused_node && ws->focused_node->type == NODE_LEAF && ws->focused_node->client) {
-				next_focus = ws->focused_node->client;
-			} else if (ws->focused_node) {
-				Client *leaves[1];
-				if (node_collect_leaves(ws->focused_node, leaves, 1) > 0)
-					next_focus = leaves[0];
-			}
-			if (!next_focus && ws->root) {
-				Client *leaves[1];
-				if (node_collect_leaves(ws->root, leaves, 1) > 0)
-					next_focus = leaves[0];
-			}
-		}
-		if (!next_focus)
-			next_focus = focustop(m ? m : selmon);
+		next_focus = focustop(m ? m : selmon);
 		focusclient(next_focus, 1);
 	}
 

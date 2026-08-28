@@ -102,11 +102,7 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 	 * processing keys, rather than passing them on to the client for its own
 	 * processing.
 	 */
-	const Key *k;
-	char target_label = '\0', key_ch, lbl_lower;
-	xkb_keysym_t lower_sym;
-	size_t i, len;
-	Client *tc;
+	char target_label = '\0';
 
 	/* Handle ESC / Return / Jump Labels in Overview Mode */
 	if (selmon && selmon->isoverview) {
@@ -119,12 +115,12 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 			return 1;
 		}
 
-		lower_sym = xkb_keysym_to_lower(sym);
+		xkb_keysym_t lower_sym = xkb_keysym_to_lower(sym);
 		if (lower_sym >= XKB_KEY_a && lower_sym <= XKB_KEY_z) {
-			key_ch = 'a' + (lower_sym - XKB_KEY_a);
-			len = strlen(overview_labels);
-			for (i = 0; i < len; i++) {
-				lbl_lower = (overview_labels[i] >= 'A' && overview_labels[i] <= 'Z')
+			char key_ch = 'a' + (lower_sym - XKB_KEY_a);
+			size_t len = strlen(overview_labels);
+			for (size_t i = 0; i < len; i++) {
+				char lbl_lower = (overview_labels[i] >= 'A' && overview_labels[i] <= 'Z')
 					? ('a' + (overview_labels[i] - 'A')) : overview_labels[i];
 				if (lbl_lower == key_ch) {
 					target_label = overview_labels[i];
@@ -134,6 +130,7 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 		}
 
 		if (target_label != '\0') {
+			Client *tc;
 			wl_list_for_each(tc, &clients, link) {
 				if (tc->mon == selmon && tc->label == target_label) {
 					focusclient(tc, 1);
@@ -144,7 +141,7 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 		}
 	}
 
-	for (k = keys; k < END(keys); k++) {
+	for (const Key *k = keys; k < END(keys); k++) {
 		if (CLEANMASK(mods) == CLEANMASK(k->mod)
 				&& xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(k->keysym)
 				&& k->func) {

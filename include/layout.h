@@ -9,17 +9,14 @@
 void arrange(Monitor *m);
 void arrange_workspace(Monitor *m, Workspace *ws, struct wlr_box box, const Layout *lt);
 void tree_layout(Monitor *m);
-void bsp_layout(Monitor *m);
 void dwindle(Monitor *m);
-void fibonacci(Monitor *m);
-void master_stack(Monitor *m);
 void columns(Monitor *m);
 void tile(Monitor *m);
 void monocle(Monitor *m);
-void spiral(Monitor *m);
 void overview(Monitor *m);
 void focusdir(const Arg *arg);
 void focusstack(const Arg *arg);
+void movestack(const Arg *arg);
 void incnmaster(const Arg *arg);
 void setlayout(const Arg *arg);
 void setmfact(const Arg *arg);

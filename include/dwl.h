@@ -75,7 +75,6 @@
 #endif
 
 #include "util.h"
-#include "tree.h"
 #include "workspace.h"
 
 /* macros */
@@ -151,7 +150,6 @@ struct Client {
 	struct wlr_scene_tree *label_tree;
 	int prev_workspace;
 	Workspace *ws;
-	Node *node;
 	struct timespec last_resize_time;
 	uint32_t id;
 };
@@ -203,6 +201,7 @@ struct Monitor {
 	struct wlr_output *wlr_output;
 	struct wlr_scene_output *scene_output;
 	struct wlr_scene_rect *fullscreen_bg; /* See createmon() for info */
+	struct wlr_scene_rect *scratchpad_bg; /* Semi-transparent backdrop rect for scratchpad overlay workspace */
 	struct wl_listener frame;
 	struct wl_listener destroy;
 	struct wl_listener request_state;
@@ -312,23 +311,13 @@ void xytonode(double x, double y, struct wlr_surface **psurface, Client **pc, La
 /* action & binding callbacks */
 void chvt(const Arg *arg);
 void focusmon(const Arg *arg);
-void focusstack(const Arg *arg);
-void incnmaster(const Arg *arg);
 void killclient(const Arg *arg);
 void moveresize(const Arg *arg);
 void quit(const Arg *arg);
-void setlayout(const Arg *arg);
-void setmfact(const Arg *arg);
 void spawn(const Arg *arg);
 void tagmon(const Arg *arg);
 void togglefloating(const Arg *arg);
 void togglefullscreen(const Arg *arg);
 void zoom(const Arg *arg);
-
-/* layout algorithms */
-void tile(Monitor *m);
-void monocle(Monitor *m);
-void dwindle(Monitor *m);
-void spiral(Monitor *m);
 
 #endif /* DWL_H */

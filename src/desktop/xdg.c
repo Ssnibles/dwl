@@ -9,7 +9,6 @@
 
 #include "server.h"
 #include "dwl.h"
-#include "tree.h"
 #include "workspace.h"
 #include "rules.h"
 #include "layout.h"

@@ -10,7 +10,6 @@
 #include "layout.h"
 #include "config.h"
 #include "util.h"
-#include "tree.h"
 #include "workspace.h"
 
 Workspace *
@@ -29,8 +28,6 @@ workspace_create(Monitor *m, int id, const char *name)
 		snprintf(ws->name, sizeof(ws->name), "%d", id);
 
 	ws->mon = m;
-	ws->root = node_create(NODE_ROOT, ws);
-	ws->focused_node = ws->root;
 	ws->layout = &layouts[0];
 	wl_list_init(&ws->link);
 	wl_list_insert(m->workspaces.prev, &ws->link);
@@ -53,9 +50,6 @@ workspace_destroy(Workspace *ws)
 
 	wl_list_remove(&ws->link);
 	wl_list_init(&ws->link);
-
-	if (ws->root)
-		node_free_tree(ws->root);
 
 	free(ws);
 }
@@ -91,14 +85,11 @@ workspace_switch(Workspace *ws)
 
 	arrange(m);
 
-	if (ws->focused_node && ws->focused_node->client)
-		focusclient(ws->focused_node->client, 1);
-	else
-		focusclient(focustop(m), 1);
+	focusclient(focustop(m), 1);
 	printstatus();
 }
 
-/* Move client between workspaces, updating N-ary tree nodes and surface visibility */
+/* Move client between workspaces and update surface visibility */
 void
 client_move_to_workspace(Client *c, Workspace *ws)
 {
@@ -110,10 +101,6 @@ client_move_to_workspace(Client *c, Workspace *ws)
 
 	old_mon = c->mon;
 
-	/* Remove client from current workspace tree */
-	if (c->node)
-		node_remove(c->node);
-
 	if (c->mon != ws->mon) {
 		c->mon = ws->mon;
 		c->prev = c->geom;
@@ -123,9 +110,6 @@ client_move_to_workspace(Client *c, Workspace *ws)
 	c->ws = ws;
 	if (ws->id != SCRATCHPAD_WORKSPACE)
 		c->prev_workspace = 0;
-
-	if (!c->isfloating)
-		node_insert_client(ws, c);
 
 	/* Visibility check */
 	visible = (ws == ws->mon->active_workspace) ||
@@ -209,8 +193,6 @@ togglescratchpad_client(const Arg *arg)
 		target_c->wasfloating = target_c->isfloating;
 		target_c->prev_workspace = target_c->ws ? target_c->ws->id : 1;
 		client_move_to_workspace(target_c, scratch_ws);
-		if (!target_c->isfloating)
-			setfloating(target_c, 1);
 
 		selmon->scratchpad_showing = 1;
 		arrange(selmon);

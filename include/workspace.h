@@ -1,27 +1,23 @@
 /*
  * See LICENSE file for copyright and license details.
  */
-#ifndef TREE_WORKSPACE_H
-#define TREE_WORKSPACE_H
+#ifndef WORKSPACE_H
+#define WORKSPACE_H
 
 #include <wayland-server-core.h>
-#include "tree.h"
 
 /* Forward declarations */
 struct Monitor;
 struct Client;
 typedef struct Layout Layout;
+typedef union Arg Arg;
 
 typedef struct Workspace Workspace;
 struct Workspace {
 	int id;                     /* Numeric ID (e.g. 1..9) */
 	char name[32];              /* Display name (e.g., "1", "2") */
 	struct Monitor *mon;        /* Parent monitor pointer */
-	Node *root;                 /* Root node of workspace N-ary tree */
-	Node *focused_node;         /* Focused leaf or container node */
-	SplitType next_split;       /* Manual split direction for next window */
 	const Layout *layout;       /* Active layout algorithm */
-	unsigned int tree_gen;      /* Incremented on any tree mutation (insert/remove/collapse) */
 	struct wl_list link;        /* Linked list entry in Monitor->workspaces */
 };
 
@@ -35,11 +31,11 @@ Workspace *workspace_get_by_id(struct Monitor *m, int id);
 #define SCRATCHPAD_WORKSPACE 0
 
 /* Keybinding handlers */
-void view_workspace(const union Arg *arg);
-void move_to_workspace(const union Arg *arg);
-void togglescratchpad_client(const union Arg *arg);
-void togglescratchpad_view(const union Arg *arg);
+void view_workspace(const Arg *arg);
+void move_to_workspace(const Arg *arg);
+void togglescratchpad_client(const Arg *arg);
+void togglescratchpad_view(const Arg *arg);
 
 int scratchpad_client_count(struct Monitor *m);
 
-#endif /* TREE_WORKSPACE_H */
+#endif /* WORKSPACE_H */
