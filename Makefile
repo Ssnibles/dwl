@@ -28,26 +28,25 @@ PROTO_HDRS = include/cursor-shape-v1-protocol.h \
 	include/wlr-output-power-management-unstable-v1-protocol.h \
 	include/xdg-shell-protocol.h
 
-OBJS = main.o server.o xdg.o layer_shell.o cursor.o seat.o dwl.o util.o rules.o layout.o output.o workspace.o color.o
+OBJS = main.o server.o xdg.o layer_shell.o cursor.o seat.o dwl.o util.o rules.o layout.o output.o workspace.o
 
 all: dwl
 
 dwl: $(OBJS)
 	$(CC) $(OBJS) $(DWLCFLAGS) $(LDFLAGS) $(LDLIBS) -o $@
 
-main.o: main.c server.h dwl.h include/color.h include/config.h $(PROTO_HDRS)
-server.o: server.c server.h dwl.h workspace.h rules.h layout.h cursor.h seat.h output.h layers.h util.h client.h include/color.h include/config.h config.mk $(PROTO_HDRS)
-xdg.o: xdg.c xdg.h layer_shell.h dwl.h server.h client.h include/color.h include/config.h $(PROTO_HDRS)
-layer_shell.o: layer_shell.c layer_shell.h dwl.h server.h layout.h client.h include/color.h include/config.h $(PROTO_HDRS)
-cursor.o: cursor.c cursor.h dwl.h client.h include/color.h include/config.h $(PROTO_HDRS)
-seat.o: seat.c seat.h dwl.h client.h include/color.h include/config.h $(PROTO_HDRS)
-dwl.o: dwl.c server.h dwl.h workspace.h rules.h layout.h cursor.h seat.h output.h layers.h util.h client.h include/color.h include/config.h config.mk $(PROTO_HDRS)
+main.o: main.c server.h dwl.h include/config.h $(PROTO_HDRS)
+server.o: server.c server.h dwl.h workspace.h rules.h layout.h cursor.h seat.h output.h layers.h util.h client.h include/config.h config.mk $(PROTO_HDRS)
+xdg.o: xdg.c xdg.h layer_shell.h dwl.h server.h client.h include/config.h $(PROTO_HDRS)
+layer_shell.o: layer_shell.c layer_shell.h dwl.h server.h layout.h client.h include/config.h $(PROTO_HDRS)
+cursor.o: cursor.c cursor.h dwl.h client.h include/config.h $(PROTO_HDRS)
+seat.o: seat.c seat.h dwl.h client.h include/config.h $(PROTO_HDRS)
+dwl.o: dwl.c server.h dwl.h workspace.h rules.h layout.h cursor.h seat.h output.h layers.h util.h client.h include/config.h config.mk $(PROTO_HDRS)
 util.o: util.c util.h
-rules.o: rules.c rules.h dwl.h client.h include/color.h include/config.h
-layout.o: layout.c layout.h workspace.h dwl.h client.h include/color.h include/config.h
-output.o: output.c output.h layers.h workspace.h dwl.h client.h include/color.h include/config.h
-workspace.o: workspace.c workspace.h dwl.h client.h layout.h util.h include/color.h
-color.o: color.c include/color.h
+rules.o: rules.c rules.h dwl.h client.h include/config.h
+layout.o: layout.c layout.h workspace.h dwl.h client.h include/config.h
+output.o: output.c output.h layers.h workspace.h dwl.h client.h include/config.h
+workspace.o: workspace.c workspace.h dwl.h client.h layout.h util.h
 
 # wayland-scanner is a tool which generates C headers and rigging for Wayland
 # protocols, which are specified in XML. wlroots requires you to rig these up

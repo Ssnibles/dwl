@@ -13,7 +13,17 @@ static const unsigned int gappx            = 8;  /* margin/gap pixel around/betw
 static const unsigned int min_width        = 100; /* minimum width of windows */
 static const unsigned int min_height       = 100; /* minimum height of windows */
 static const unsigned int corner_radius    = 8;  /* rounded corner radius of windows */
-/* Colors are dynamically parsed from colors.conf or initialized with default RGBA values */
+/* Colors - Tokyo Night palette */
+static const float rootcolor[4]          = COLOR(0x1a1b26ff);
+static const float bordercolor[4]        = COLOR(0x24283bff);
+static const float focuscolor[4]         = COLOR(0x7aa2f7ff);
+static const float urgentcolor[4]        = COLOR(0xf7768eff);
+static const float fullscreen_bg[4]      = COLOR(0x000000ff);
+static const float scratchpad_bg[4]      = COLOR(0x0f0f14b3);
+static const float snap_border_center[4] = COLOR(0xd93333bf);
+static const float snap_bg_center[4]     = COLOR(0x660d0d80);
+static const float snap_border_edge[4]   = COLOR(0xbf2626b3);
+static const float snap_bg_edge[4]       = COLOR(0x800d0d80);
 
 /* Jump label characters for overview mode (defaults to left-hand keys, excluding hjkl) */
 static const char overview_labels[]        = "ASDFGQWERTZXCVB";
@@ -118,10 +128,12 @@ static const Key keys[] = {
 	{ MODKEY,                    XKB_KEY_Down,        focusdir,         {.i = WLR_DIRECTION_DOWN} },
 
 	/* Master / Fact & Window Stack Controls */
-	{ MODKEY,                    XKB_KEY_equal,       setmfact,         {.f = +0.05f} },
-	{ MODKEY,                    XKB_KEY_minus,       setmfact,         {.f = -0.05f} },
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_h,           setmfact,         {.f = -0.05f} },
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_l,           setmfact,         {.f = +0.05f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_j,           setcfact,         {.f = -0.25f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_k,           setcfact,         {.f = +0.25f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_minus,       setcfact,         {.f = 0.00f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_equal,       setmfact,         {.f = 0.00f} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_j,           movestack,        {.i = +1} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_k,           movestack,        {.i = -1} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_h,           movestack,        {.i = -1} },

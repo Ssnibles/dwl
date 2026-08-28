@@ -124,12 +124,9 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 		xkb_keysym_t lower_sym = xkb_keysym_to_lower(sym);
 		if (lower_sym >= XKB_KEY_a && lower_sym <= XKB_KEY_z) {
 			char key_ch = 'a' + (lower_sym - XKB_KEY_a);
-			size_t len = strlen(overview_labels);
-			for (size_t i = 0; i < len; i++) {
-				char lbl_lower = (overview_labels[i] >= 'A' && overview_labels[i] <= 'Z')
-					? ('a' + (overview_labels[i] - 'A')) : overview_labels[i];
-				if (lbl_lower == key_ch) {
-					target_label = overview_labels[i];
+			for (const char *p = overview_labels; *p; p++) {
+				if (((*p >= 'A' && *p <= 'Z') ? (*p + 32) : *p) == key_ch) {
+					target_label = *p;
 					break;
 				}
 			}

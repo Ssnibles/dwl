@@ -76,7 +76,7 @@
 
 #include "util.h"
 #include "workspace.h"
-#include "color.h"
+
 
 /* macros */
 #define MAX(A, B)               ((A) > (B) ? (A) : (B))
@@ -152,6 +152,7 @@ struct Client {
 	int prev_workspace;
 	Workspace *ws;
 	struct timespec last_resize_time;
+	float cfact;
 	uint32_t id;
 };
 
@@ -318,5 +319,6 @@ void tagmon(const Arg *arg);
 void togglefloating(const Arg *arg);
 void togglefullscreen(const Arg *arg);
 void zoom(const Arg *arg);
+void setcfact(const Arg *arg);
 
 #endif /* DWL_H */

@@ -32,6 +32,7 @@ typedef enum {
 
 static int grabc_was_tiled;
 static struct wlr_box grabc_start_geom;
+static float grabc_start_cfact;
 static uint32_t grabc_edges;
 
 static struct wlr_scene_tree *snap_overlay_tree = NULL;
@@ -522,11 +523,27 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 
 			resize(grabc, (struct wlr_box){.x = new_x, .y = new_y, .width = new_w, .height = new_h}, 1);
 		} else if (grabc->mon && grabc->mon->lt[grabc->mon->sellt]->arrange) {
-			float new_mfact = (float)(cursor->x - grabc->mon->w.x) / (float)grabc->mon->w.width;
-			if (new_mfact >= 0.05f && new_mfact <= 0.95f) {
-				grabc->mon->mfact = new_mfact;
-				arrange(grabc->mon);
+			int changed = 0;
+			if (grabc_edges & (WLR_EDGE_LEFT | WLR_EDGE_RIGHT)) {
+				float new_mfact = (float)(cursor->x - grabc->mon->w.x) / (float)grabc->mon->w.width;
+				if (new_mfact >= 0.05f && new_mfact <= 0.95f) {
+					grabc->mon->mfact = new_mfact;
+					changed = 1;
+				}
 			}
+			if (grabc_edges & (WLR_EDGE_TOP | WLR_EDGE_BOTTOM)) {
+				int start_h = MAX(1, grabc_start_geom.height);
+				double diff_y = (grabc_edges & WLR_EDGE_TOP)
+						? (grabc_start_geom.y - (cursor->y - grabcy))
+						: ((cursor->y - grabcy) - (grabc_start_geom.y + grabc_start_geom.height));
+				float new_cfact = grabc_start_cfact * (1.0f + (float)diff_y / (float)start_h);
+				if (new_cfact < 0.25f) new_cfact = 0.25f;
+				if (new_cfact > 4.0f) new_cfact = 4.0f;
+				grabc->cfact = new_cfact;
+				changed = 1;
+			}
+			if (changed)
+				arrange(grabc->mon);
 		}
 
 		in_pointer_focus = 0;
@@ -576,6 +593,7 @@ moveresize(const Arg *arg)
 	destroy_snap_overlay();
 	grabc_was_tiled = !grabc->isfloating;
 	grabc_start_geom = grabc->geom;
+	grabc_start_cfact = (grabc->cfact > 0 ? grabc->cfact : 1.0f);
 	if (arg->ui == CurMove && grabc_was_tiled)
 		setfloating(grabc, 1);
 	switch (cursor_mode = arg->ui) {

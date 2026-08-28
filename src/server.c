@@ -10,8 +10,6 @@
 #include "layers.h"
 #include "config.h"
 
-struct Server server = {0};
-
 /* Definitions of global server variables */
 struct wl_display *dpy;
 struct wl_event_loop *event_loop;
@@ -57,10 +55,8 @@ handlesig(int signo)
 		siginfo_t in;
 		/* Handling child processes asynchronously without blocking */
 		while (!waitid(P_ALL, 0, &in, WEXITED | WNOHANG | WNOWAIT) && in.si_pid != 0) {
-			if (in.si_pid == child_pid) {
+			if (in.si_pid == child_pid)
 				child_pid = -1;
-				server.child_pid = -1;
-			}
 			waitpid(in.si_pid, NULL, 0);
 		}
 	} else if (signo == SIGINT || signo == SIGTERM) {
@@ -81,25 +77,24 @@ setup(void)
 	wlr_log_init(log_level, NULL);
 
 	/* The Wayland display is managed by libwayland. */
-	dpy = server.dpy = wl_display_create();
-	event_loop = server.event_loop = wl_display_get_event_loop(dpy);
+	dpy = wl_display_create();
+	event_loop = wl_display_get_event_loop(dpy);
 
 	/* The backend abstracts input/output hardware. */
-	if (!(backend = server.backend = wlr_backend_autocreate(event_loop, &session)))
+	if (!(backend = wlr_backend_autocreate(event_loop, &session)))
 		die("couldn't create backend");
-	server.session = session;
 
 	/* Initialize the scene graph */
-	scene = server.scene = wlr_scene_create();
-	root_bg = server.root_bg = wlr_scene_rect_create(&scene->tree, 0, 0, rootcolor);
+	scene = wlr_scene_create();
+	root_bg = wlr_scene_rect_create(&scene->tree, 0, 0, rootcolor);
 	for (i = 0; i < NUM_LAYERS; i++)
-		layers[i] = server.layers[i] = wlr_scene_tree_create(&scene->tree);
-	drag_icon = server.drag_icon = wlr_scene_tree_create(&scene->tree);
+		layers[i] = wlr_scene_tree_create(&scene->tree);
+	drag_icon = wlr_scene_tree_create(&scene->tree);
 	wlr_scene_node_place_below(&drag_icon->node, &layers[LyrBlock]->node);
 
 	/* Autocreates a renderer */
-	if (!(drw = server.drw = fx_renderer_create(backend)))
-		if (!(drw = server.drw = wlr_renderer_autocreate(backend)))
+	if (!(drw = fx_renderer_create(backend)))
+		if (!(drw = wlr_renderer_autocreate(backend)))
 			die("couldn't create renderer");
 	wl_signal_add(&drw->events.lost, &gpu_reset);
 
@@ -115,10 +110,10 @@ setup(void)
 			&& backend->features.timeline)
 		wlr_linux_drm_syncobj_manager_v1_create(dpy, 1, drm_fd);
 
-	if (!(alloc = server.alloc = wlr_allocator_autocreate(backend, drw)))
+	if (!(alloc = wlr_allocator_autocreate(backend, drw)))
 		die("couldn't create allocator");
 
-	compositor = server.compositor = wlr_compositor_create(dpy, 6, drw);
+	compositor = wlr_compositor_create(dpy, 6, drw);
 	wlr_subcompositor_create(dpy);
 	wlr_data_device_manager_create(dpy);
 	wlr_export_dmabuf_manager_v1_create(dpy);
@@ -132,15 +127,15 @@ setup(void)
 	wlr_presentation_create(dpy, backend, 2);
 	wlr_alpha_modifier_v1_create(dpy);
 
-	activation = server.activation = wlr_xdg_activation_v1_create(dpy);
+	activation = wlr_xdg_activation_v1_create(dpy);
 	wl_signal_add(&activation->events.request_activate, &request_activate);
 
 	wlr_scene_set_gamma_control_manager_v1(scene, wlr_gamma_control_manager_v1_create(dpy));
 
-	power_mgr = server.power_mgr = wlr_output_power_manager_v1_create(dpy);
+	power_mgr = wlr_output_power_manager_v1_create(dpy);
 	wl_signal_add(&power_mgr->events.set_mode, &output_power_mgr_set_mode);
 
-	output_layout = server.output_layout = wlr_output_layout_create(dpy);
+	output_layout = wlr_output_layout_create(dpy);
 	wl_signal_add(&output_layout->events.change, &layout_change);
 
 	wlr_xdg_output_manager_v1_create(dpy, output_layout);
@@ -151,39 +146,39 @@ setup(void)
 	wl_list_init(&clients);
 	wl_list_init(&fstack);
 
-	xdg_shell = server.xdg_shell = wlr_xdg_shell_create(dpy, 6);
+	xdg_shell = wlr_xdg_shell_create(dpy, 6);
 	wl_signal_add(&xdg_shell->events.new_toplevel, &new_xdg_toplevel);
 	wl_signal_add(&xdg_shell->events.new_popup, &new_xdg_popup);
 
-	layer_shell = server.layer_shell = wlr_layer_shell_v1_create(dpy, 3);
+	layer_shell = wlr_layer_shell_v1_create(dpy, 3);
 	wl_signal_add(&layer_shell->events.new_surface, &new_layer_surface);
 
-	idle_notifier = server.idle_notifier = wlr_idle_notifier_v1_create(dpy);
+	idle_notifier = wlr_idle_notifier_v1_create(dpy);
 
-	idle_inhibit_mgr = server.idle_inhibit_mgr = wlr_idle_inhibit_v1_create(dpy);
+	idle_inhibit_mgr = wlr_idle_inhibit_v1_create(dpy);
 	wl_signal_add(&idle_inhibit_mgr->events.new_inhibitor, &new_idle_inhibitor);
 
-	session_lock_mgr = server.session_lock_mgr = wlr_session_lock_manager_v1_create(dpy);
+	session_lock_mgr = wlr_session_lock_manager_v1_create(dpy);
 	wl_signal_add(&session_lock_mgr->events.new_lock, &new_session_lock);
-	locked_bg = server.locked_bg = wlr_scene_rect_create(layers[LyrBlock], sgeom.width, sgeom.height,
+	locked_bg = wlr_scene_rect_create(layers[LyrBlock], sgeom.width, sgeom.height,
 			(float [4]){0.1f, 0.1f, 0.1f, 1.0f});
 	wlr_scene_node_set_enabled(&locked_bg->node, 0);
 
 	wlr_server_decoration_manager_set_default_mode(
 			wlr_server_decoration_manager_create(dpy),
 			WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
-	xdg_decoration_mgr = server.xdg_decoration_mgr = wlr_xdg_decoration_manager_v1_create(dpy);
+	xdg_decoration_mgr = wlr_xdg_decoration_manager_v1_create(dpy);
 	wl_signal_add(&xdg_decoration_mgr->events.new_toplevel_decoration, &new_xdg_decoration);
 
-	pointer_constraints = server.pointer_constraints = wlr_pointer_constraints_v1_create(dpy);
+	pointer_constraints = wlr_pointer_constraints_v1_create(dpy);
 	wl_signal_add(&pointer_constraints->events.new_constraint, &new_pointer_constraint);
 
-	relative_pointer_mgr = server.relative_pointer_mgr = wlr_relative_pointer_manager_v1_create(dpy);
+	relative_pointer_mgr = wlr_relative_pointer_manager_v1_create(dpy);
 
-	cursor = server.cursor = wlr_cursor_create();
+	cursor = wlr_cursor_create();
 	wlr_cursor_attach_output_layout(cursor, output_layout);
 
-	cursor_mgr = server.cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
+	cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
 	setenv("XCURSOR_SIZE", "24", 1);
 
 	wl_signal_add(&cursor->events.motion, &cursor_motion);
@@ -192,28 +187,28 @@ setup(void)
 	wl_signal_add(&cursor->events.axis, &cursor_axis);
 	wl_signal_add(&cursor->events.frame, &cursor_frame);
 
-	cursor_shape_mgr = server.cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(dpy, 1);
+	cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(dpy, 1);
 	wl_signal_add(&cursor_shape_mgr->events.request_set_shape, &request_set_cursor_shape);
 
 	wl_signal_add(&backend->events.new_input, &new_input_device);
-	virtual_keyboard_mgr = server.virtual_keyboard_mgr = wlr_virtual_keyboard_manager_v1_create(dpy);
+	virtual_keyboard_mgr = wlr_virtual_keyboard_manager_v1_create(dpy);
 	wl_signal_add(&virtual_keyboard_mgr->events.new_virtual_keyboard,
 			&new_virtual_keyboard);
-	virtual_pointer_mgr = server.virtual_pointer_mgr = wlr_virtual_pointer_manager_v1_create(dpy);
+	virtual_pointer_mgr = wlr_virtual_pointer_manager_v1_create(dpy);
 	wl_signal_add(&virtual_pointer_mgr->events.new_virtual_pointer,
 			&new_virtual_pointer);
 
-	seat = server.seat = wlr_seat_create(dpy, "seat0");
+	seat = wlr_seat_create(dpy, "seat0");
 	wl_signal_add(&seat->events.request_set_cursor, &request_cursor);
 	wl_signal_add(&seat->events.request_set_selection, &request_set_sel);
 	wl_signal_add(&seat->events.request_set_primary_selection, &request_set_psel);
 	wl_signal_add(&seat->events.request_start_drag, &request_start_drag);
 	wl_signal_add(&seat->events.start_drag, &start_drag);
 
-	kb_group = server.kb_group = createkeyboardgroup();
+	kb_group = createkeyboardgroup();
 	wl_list_init(&kb_group->destroy.link);
 
-	output_mgr = server.output_mgr = wlr_output_manager_v1_create(dpy);
+	output_mgr = wlr_output_manager_v1_create(dpy);
 	wl_signal_add(&output_mgr->events.apply, &output_mgr_apply);
 	wl_signal_add(&output_mgr->events.test, &output_mgr_test);
 
@@ -237,7 +232,6 @@ run(const char *startup_cmd)
 	if (!socket)
 		die("startup: display_add_socket_auto");
 	setenv("WAYLAND_DISPLAY", socket, 1);
-	server.socket = socket;
 
 	if (!wlr_backend_start(backend))
 		die("startup: backend_start");
@@ -248,7 +242,6 @@ run(const char *startup_cmd)
 			die("startup: pipe:");
 		if ((child_pid = fork()) < 0)
 			die("startup: fork:");
-		server.child_pid = child_pid;
 		if (child_pid == 0) {
 			setsid();
 			dup2(piperw[0], STDIN_FILENO);

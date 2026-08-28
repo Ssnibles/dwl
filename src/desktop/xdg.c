@@ -36,6 +36,7 @@ createnotify(struct wl_listener *listener, void *data)
 	c->id = ++last_client_id;
 	c->surface.xdg = toplevel->base;
 	c->bw = borderpx;
+	c->cfact = 1.0f;
 
 	LISTEN(&toplevel->base->surface->events.commit, &c->commit, commitnotify);
 	LISTEN(&toplevel->base->surface->events.map, &c->map, mapnotify);

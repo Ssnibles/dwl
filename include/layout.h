@@ -16,6 +16,7 @@ void movestack(const Arg *arg);
 void incnmaster(const Arg *arg);
 void setlayout(const Arg *arg);
 void setmfact(const Arg *arg);
+void setcfact(const Arg *arg);
 void destroylabeloverlay(Client *c);
 void toggleoverview(const Arg *arg);
 void focusdir(const Arg *arg);

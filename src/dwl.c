@@ -933,12 +933,10 @@ unmapnotify(struct wl_listener *listener, void *data)
 	/* Called when the surface is unmapped, and should no longer be shown. */
 	Client *c = wl_container_of(listener, c, unmap);
 	Monitor *m_iter;
+	destroy_snap_overlay();
 	if (c == grabc) {
 		cursor_mode = CurNormal;
 		grabc = NULL;
-		destroy_snap_overlay();
-	} else {
-		destroy_snap_overlay();
 	}
 
 	wl_list_for_each(m_iter, &mons, link) {
@@ -1131,6 +1129,7 @@ createnotifyx11(struct wl_listener *listener, void *data)
 	c->surface.xwayland = xsurface;
 	c->type = X11;
 	c->bw = client_is_unmanaged(c) ? 0 : borderpx;
+	c->cfact = 1.0f;
 
 	/* Listen to the various events it can emit */
 	LISTEN(&xsurface->events.associate, &c->associate, associatex11);

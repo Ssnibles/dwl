@@ -116,7 +116,7 @@ dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 	int g = (int)gappx;
 	struct wlr_box b1, b2;
 	int is_horiz;
-	float fact = (depth == 0) ? (selmon ? selmon->mfact : 0.5f) : 0.5f;
+	float fact;
 
 	if (count <= 0)
 		return;
@@ -132,6 +132,21 @@ dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 	}
 
 	is_horiz = (depth % 2 == 0);
+
+	if (depth == 0) {
+		fact = selmon ? selmon->mfact : 0.5f;
+	} else if (is_horiz) {
+		fact = 0.5f;
+	} else {
+		float cfirst = leaves[0]->cfact > 0 ? leaves[0]->cfact : 1.0f;
+		float crest_sum = 0.0f;
+		for (int i = 1; i < count; i++)
+			crest_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+		float crest_avg = crest_sum / (count - 1);
+		fact = cfirst / (cfirst + crest_avg);
+		if (fact < 0.1f) fact = 0.1f;
+		if (fact > 0.9f) fact = 0.9f;
+	}
 
 	if (is_horiz) {
 		int w = (int)roundf((float)(box.width - g) * fact);
@@ -214,6 +229,7 @@ tile_box(Monitor *m, const Workspace *ws, struct wlr_box box)
 	int my, ty;
 	int g = (int)gappx;
 	int mx, mw_final, sx, sw_final;
+	float mfact_sum = 0.0f, sfact_sum = 0.0f;
 
 	int n = get_workspace_leaves(ws, leaves, 128);
 	if (n == 0)
@@ -240,16 +256,28 @@ tile_box(Monitor *m, const Workspace *ws, struct wlr_box box)
 		sw_final = mw_final;
 	}
 
+	for (int i = 0; i < n; i++) {
+		if (i < nm)
+			mfact_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+		else
+			sfact_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+	}
+	if (mfact_sum <= 0.0f) mfact_sum = 1.0f;
+	if (sfact_sum <= 0.0f) sfact_sum = 1.0f;
+
 	my = ty = 0;
 	for (int i = 0; i < n; i++) {
 		Client *c = leaves[i];
-		if (i < m->nmaster) {
-			int h = (i == nm - 1) ? (box.height - my - g * 2) : ((box.height - g * (nm + 1)) / nm);
+		float cf = c->cfact > 0 ? c->cfact : 1.0f;
+		if (i < nm) {
+			int avail_h = box.height - g * (nm + 1);
+			int h = (i == nm - 1) ? (box.height - my - g * 2) : (int)roundf(avail_h * (cf / mfact_sum));
 			h = MAX(1, h);
 			resize(c, (struct wlr_box){.x = mx, .y = box.y + my + g, .width = mw_final, .height = h}, 0);
 			my += h + g;
 		} else {
-			int h = (i == n - 1) ? (box.height - ty - g * 2) : ((box.height - g * (ns + 1)) / ns);
+			int avail_h = box.height - g * (ns + 1);
+			int h = (i == n - 1) ? (box.height - ty - g * 2) : (int)roundf(avail_h * (cf / sfact_sum));
 			h = MAX(1, h);
 			resize(c, (struct wlr_box){.x = sx, .y = box.y + ty + g, .width = sw_final, .height = h}, 0);
 			ty += h + g;
@@ -371,10 +399,39 @@ setmfact(const Arg *arg)
 
 	if (!arg || !selmon || !selmon->lt[selmon->sellt]->arrange)
 		return;
+	if (arg->f == 0.0f) {
+		selmon->mfact = 0.55f;
+		arrange(selmon);
+		return;
+	}
 	f = arg->f < 1.0f ? arg->f + selmon->mfact : arg->f - 1.0f;
 	if (f < 0.1f || f > 0.9f)
 		return;
 	selmon->mfact = f;
+	arrange(selmon);
+}
+
+void
+setcfact(const Arg *arg)
+{
+	Client *c;
+
+	if (!arg || !selmon || !selmon->lt[selmon->sellt]->arrange)
+		return;
+	c = focustop(selmon);
+	if (!c || c->isfloating)
+		return;
+
+	if (arg->f == 0.0f) {
+		c->cfact = 1.0f;
+	} else {
+		float f = c->cfact + arg->f;
+		if (f < 0.25f)
+			f = 0.25f;
+		else if (f > 4.0f)
+			f = 4.0f;
+		c->cfact = f;
+	}
 	arrange(selmon);
 }
 
@@ -383,18 +440,16 @@ static int
 get_overview_clients(const Monitor *m, Client **leaves, int max)
 {
 	Client *c;
-	int count = (m && m->active_workspace) ? get_workspace_leaves(m->active_workspace, leaves, max) : 0;
+	int count;
+	if (!m)
+		return 0;
 
+	count = m->active_workspace ? get_workspace_leaves(m->active_workspace, leaves, max) : 0;
 	wl_list_for_each(c, &clients, link) {
 		if (c->mon == m && (!c->ws || c->ws->id != SCRATCHPAD_WORKSPACE)) {
-			int found = 0, j;
-			for (j = 0; j < count; j++) {
-				if (leaves[j] == c) {
-					found = 1;
-					break;
-				}
-			}
-			if (!found && count < max)
+			int j;
+			for (j = 0; j < count && leaves[j] != c; j++);
+			if (j == count && count < max)
 				leaves[count++] = c;
 		}
 	}
@@ -626,9 +681,7 @@ focusdir(const Arg *arg)
 		if (tc == c || (selmon->isoverview ? (tc->mon != selmon || (tc->ws && tc->ws->id == SCRATCHPAD_WORKSPACE)) : !VISIBLEON(tc, selmon)))
 			continue;
 
-		if (is_scratch && (!tc->ws || tc->ws->id != SCRATCHPAD_WORKSPACE))
-			continue;
-		if (!is_scratch && tc->ws && tc->ws->id == SCRATCHPAD_WORKSPACE)
+		if ((tc->ws && tc->ws->id == SCRATCHPAD_WORKSPACE) != is_scratch)
 			continue;
 
 		tx = tc->geom.x + tc->geom.width / 2.0;

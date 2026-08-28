@@ -6,51 +6,7 @@
 
 #include "dwl.h"
 
-struct Server {
-	struct wl_display *dpy;
-	struct wl_event_loop *event_loop;
-	struct wlr_backend *backend;
-	struct wlr_scene *scene;
-	struct wlr_scene_tree *layers[NUM_LAYERS];
-	struct wlr_scene_tree *drag_icon;
-	struct wlr_renderer *drw;
-	struct wlr_allocator *alloc;
-	struct wlr_compositor *compositor;
-	struct wlr_session *session;
 
-	struct wlr_xdg_shell *xdg_shell;
-	struct wlr_xdg_activation_v1 *activation;
-	struct wlr_xdg_decoration_manager_v1 *xdg_decoration_mgr;
-	struct wlr_idle_notifier_v1 *idle_notifier;
-	struct wlr_idle_inhibit_manager_v1 *idle_inhibit_mgr;
-	struct wlr_layer_shell_v1 *layer_shell;
-	struct wlr_output_manager_v1 *output_mgr;
-	struct wlr_virtual_keyboard_manager_v1 *virtual_keyboard_mgr;
-	struct wlr_virtual_pointer_manager_v1 *virtual_pointer_mgr;
-	struct wlr_cursor_shape_manager_v1 *cursor_shape_mgr;
-	struct wlr_output_power_manager_v1 *power_mgr;
-
-	struct wlr_pointer_constraints_v1 *pointer_constraints;
-	struct wlr_relative_pointer_manager_v1 *relative_pointer_mgr;
-	struct wlr_pointer_constraint_v1 *active_constraint;
-
-	struct wlr_cursor *cursor;
-	struct wlr_xcursor_manager *cursor_mgr;
-
-	struct wlr_scene_rect *root_bg;
-	struct wlr_session_lock_manager_v1 *session_lock_mgr;
-	struct wlr_scene_rect *locked_bg;
-	struct wlr_session_lock_v1 *cur_lock;
-
-	struct wlr_seat *seat;
-	KeyboardGroup *kb_group;
-	struct wlr_output_layout *output_layout;
-
-	pid_t child_pid;
-	const char *socket;
-};
-
-extern struct Server server;
 
 /* Global server variables */
 extern struct wl_display *dpy;
