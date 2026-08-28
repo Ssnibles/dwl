@@ -76,6 +76,7 @@
 
 #include "util.h"
 #include "workspace.h"
+#include "color.h"
 
 /* macros */
 #define MAX(A, B)               ((A) > (B) ? (A) : (B))

@@ -589,7 +589,9 @@ mapnotify(struct wl_listener *listener, void *data)
 		applyrules(c);
 	}
 	sel = focustop(c->mon);
-	if (sel && sel->ws)
+	if (c->mon && c->mon->scratchpad_showing)
+		c->ws = workspace_get_by_id(c->mon, SCRATCHPAD_WORKSPACE);
+	else if (sel && sel->ws)
 		c->ws = sel->ws;
 	else if (c->mon && c->mon->active_workspace)
 		c->ws = c->mon->active_workspace;
@@ -829,8 +831,12 @@ setmon(Client *c, Monitor *m)
 	c->prev = c->geom;
 
 	if (m) {
-		Client *sel = focustop(m);
-		c->ws = (sel && sel->ws) ? sel->ws : m->active_workspace;
+		if (m->scratchpad_showing) {
+			c->ws = workspace_get_by_id(m, SCRATCHPAD_WORKSPACE);
+		} else {
+			Client *sel = focustop(m);
+			c->ws = (sel && sel->ws) ? sel->ws : m->active_workspace;
+		}
 	}
 
 	/* Scene graph sends surface leave/enter events on move and resize */

@@ -288,19 +288,12 @@ arrange_workspace(Monitor *m, Workspace *ws, struct wlr_box box, const Layout *l
 		tile_box(m, ws, box);
 	else if (lt->arrange == monocle)
 		monocle_box(m, ws, box);
-	else if (lt->arrange == dwindle || lt->arrange == tree_layout)
+	else if (lt->arrange == dwindle)
 		dwindle_box(m, ws, box);
 	else if (lt->arrange == columns)
 		columns_box(m, ws, box);
 	else
 		lt->arrange(m);
-}
-
-void
-tree_layout(Monitor *m)
-{
-	if (m && m->active_workspace)
-		dwindle_box(m, m->active_workspace, m->w);
 }
 
 void

@@ -13,19 +13,7 @@ static const unsigned int gappx            = 8;  /* margin/gap pixel around/betw
 static const unsigned int min_width        = 100; /* minimum width of windows */
 static const unsigned int min_height       = 100; /* minimum height of windows */
 static const unsigned int corner_radius    = 8;  /* rounded corner radius of windows */
-static const float rootcolor[]             = COLOR(0x19181dff);
-static const float bordercolor[]           = COLOR(0x32303aff);
-static const float focuscolor[]            = COLOR(0xa9b1d6ff);
-static const float urgentcolor[]           = COLOR(0xf7768eff);
-/* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
-static const float fullscreen_bg[]         = {0.0f, 0.0f, 0.0f, 1.0f};
-static const float scratchpad_bg[]         = COLOR(0x00000066);
-
-/* Snap overlay colors */
-static const float snap_border_center[]    = COLOR(0xd93333bf);
-static const float snap_bg_center[]        = COLOR(0x660d0d80);
-static const float snap_border_edge[]      = COLOR(0xbf2626b3);
-static const float snap_bg_edge[]          = COLOR(0x800d0d80);
+/* Colors are dynamically parsed from colors.conf or initialized with default RGBA values */
 
 /* Jump label characters for overview mode (defaults to left-hand keys, excluding hjkl) */
 static const char overview_labels[]        = "ASDFGQWERTZXCVB";
@@ -116,10 +104,7 @@ static const Key keys[] = {
 	/* Window Management */
 	{ MODKEY,                    XKB_KEY_q,           killclient,       {0} },
 	{ MODKEY,                    XKB_KEY_f,           togglefullscreen, {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {0} },
 	{ MODKEY,                    XKB_KEY_v,           togglefloating,   {0} },
-	{ MODKEY,                    XKB_KEY_c,           togglefloating,   {0} },
-	{ MODKEY,                    XKB_KEY_g,           togglefloating,   {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_r,           quit,             {0} },
 
 	/* Directional Focus (Vim & Arrow keys) - Spatial focusdir */
@@ -141,7 +126,7 @@ static const Key keys[] = {
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_k,           movestack,        {.i = -1} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_h,           movestack,        {.i = -1} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_l,           movestack,        {.i = +1} },
-	{ MODKEY,                    XKB_KEY_Return,      zoom,             {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Return,      zoom,             {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_equal,       incnmaster,       {.i = +1} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_minus,       incnmaster,       {.i = -1} },
 
@@ -204,6 +189,7 @@ static const Key keys[] = {
 	{ MODKEY,                    XKB_KEY_o,           toggleoverview,   {0} },
 	{ MODKEY,                    XKB_KEY_r,           setlayout,        {.v = &layouts[0]} },
 	{ MODKEY,                    XKB_KEY_t,           setlayout,        {.v = &layouts[1]} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_space,       setlayout,        {.v = &layouts[2]} },
 	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts[3]} },
 	{ MODKEY,                    XKB_KEY_c,           setlayout,        {.v = &layouts[4]} },
 
