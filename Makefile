@@ -27,7 +27,7 @@ PROTO_HDRS = include/cursor-shape-v1-protocol.h \
 	include/wlr-output-power-management-unstable-v1-protocol.h \
 	include/xdg-shell-protocol.h
 
-OBJS = main.o server.o xdg.o layer_shell.o cursor.o seat.o dwl.o util.o rules.o layout.o output.o tree.o workspace.o
+OBJS = main.o server.o xdg.o layer_shell.o cursor.o seat.o dwl.o util.o rules.o layout.o output.o tree.o workspace.o ipc.o
 
 all: dwl
 
@@ -48,8 +48,9 @@ util.o: util.c util.h
 rules.o: rules.c rules.h dwl.h client.h include/config.h
 layout.o: layout.c layout.h tree.h workspace.h dwl.h client.h include/config.h
 output.o: output.c output/output.h layers.h tree.h workspace.h dwl.h client.h include/config.h
-tree.o: tree.c tree/tree.h dwl.h client.h layout.h util.h
+tree.o: tree.c tree/tree.h dwl.h client.h layout.h util.h ipc/ipc.h
 workspace.o: workspace.c tree/workspace.h tree/tree.h dwl.h client.h layout.h util.h
+ipc.o: ipc.c ipc/ipc.h tree/tree.h workspace.h dwl.h client.h
 
 # wayland-scanner is a tool which generates C headers and rigging for Wayland
 # protocols, which are specified in XML. wlroots requires you to rig these up

@@ -41,6 +41,10 @@
               "DATADIR=$(out)/share"
               "MANDIR=$(out)/share/man"
             ];
+
+            meta = {
+              mainProgram = "dwl";
+            };
           };
 
           tree-viewer = pkgs.stdenv.mkDerivation {
@@ -67,6 +71,10 @@
               mkdir -p $out/bin
               cp tree-viewer $out/bin/tree-viewer
             '';
+
+            meta = {
+              mainProgram = "tree-viewer";
+            };
           };
         }
       );
