@@ -15,7 +15,7 @@
 #include "cursor.h"
 #include "seat.h"
 #include "output.h"
-#include "desktop/layer_shell.h"
+#include "layer_shell.h"
 #include "client.h"
 #include "config.h"
 #include "util.h"

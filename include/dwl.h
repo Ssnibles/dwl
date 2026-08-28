@@ -153,6 +153,7 @@ struct Client {
 	Workspace *ws;
 	Node *node;
 	struct timespec last_resize_time;
+	uint32_t id;
 };
 
 typedef struct {
@@ -287,6 +288,7 @@ extern struct wlr_scene_rect *locked_bg;
 extern void *exclusive_focus;
 extern const int layermap[];
 extern int log_level;
+extern uint32_t last_client_id;
 
 /* function declarations */
 void checkidleinhibitor(struct wlr_surface *exclude);

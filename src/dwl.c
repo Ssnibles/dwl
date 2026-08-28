@@ -8,8 +8,8 @@
 #include "seat.h"
 #include "output.h"
 #include "layers.h"
-#include "desktop/xdg.h"
-#include "desktop/layer_shell.h"
+#include "xdg.h"
+#include "layer_shell.h"
 
 
 /* function declarations */
@@ -83,6 +83,7 @@ const int layermap[] = { LyrBg, LyrBottom, LyrTop, LyrOverlay };
 
 struct wl_list clients; /* tiling order */
 struct wl_list fstack;  /* focus order */
+uint32_t last_client_id = 0;
 
 unsigned int cursor_mode;
 Client *grabc;
@@ -1148,6 +1149,7 @@ createnotifyx11(struct wl_listener *listener, void *data)
 
 	/* Allocate a Client for this surface */
 	c = xsurface->data = ecalloc(1, sizeof(*c));
+	c->id = ++last_client_id;
 	c->surface.xwayland = xsurface;
 	c->type = X11;
 	c->bw = client_is_unmanaged(c) ? 0 : borderpx;

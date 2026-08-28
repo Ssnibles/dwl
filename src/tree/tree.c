@@ -12,7 +12,6 @@
 #include "util.h"
 #include "tree.h"
 #include "workspace.h"
-#include "ipc/ipc.h"
 
 Node *
 node_create(NodeType type, Workspace *ws)

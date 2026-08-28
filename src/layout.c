@@ -61,8 +61,6 @@ arrange(Monitor *m)
 		if (m->active_workspace) {
 			lt = resolve_layout(NULL, m, NULL);
 			arrange_workspace(m, m->active_workspace, m->w, lt);
-			if (cursor_mode != CurResize && cursor_mode != CurMove)
-				tree_export_ipc(m->active_workspace);
 		}
 
 		if (m->scratchpad_showing) {

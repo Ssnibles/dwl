@@ -16,8 +16,8 @@
 #include "cursor.h"
 #include "seat.h"
 #include "output.h"
-#include "desktop/layer_shell.h"
-#include "desktop/xdg.h"
+#include "layer_shell.h"
+#include "xdg.h"
 #include "client.h"
 #include "config.h"
 #include "util.h"
@@ -31,6 +31,7 @@ createnotify(struct wl_listener *listener, void *data)
 
 	/* Allocate a Client for this surface */
 	c = toplevel->base->data = ecalloc(1, sizeof(*c));
+	c->id = ++last_client_id;
 	c->surface.xdg = toplevel->base;
 	c->bw = borderpx;
 

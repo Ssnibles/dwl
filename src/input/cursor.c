@@ -242,8 +242,6 @@ buttonpress(struct wl_listener *listener, void *data)
 		if (cursor_mode == CurResize)
 			tree_mouse_resize_end();
 		cursor_mode = CurNormal;
-		if (selmon && selmon->active_workspace)
-			tree_export_ipc(selmon->active_workspace);
 		break;
 	}
 	/* If the event wasn't handled by the compositor, notify the client with
