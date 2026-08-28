@@ -11,6 +11,11 @@
 #include "config.h"
 #include "workspace.h"
 
+static void clearlabeloverlays(const Monitor *m);
+static void updatelabeloverlays(const Monitor *m);
+static void arrange_workspace(Monitor *m, const Workspace *ws, struct wlr_box box, const Layout *lt);
+static void overview(Monitor *m);
+
 void
 arrange(Monitor *m)
 {
@@ -92,7 +97,7 @@ arrange(Monitor *m)
 }
 
 static inline int
-get_workspace_leaves(Workspace *ws, Client **leaves, int max)
+get_workspace_leaves(const Workspace *ws, Client **leaves, int max)
 {
 	Client *c;
 	int count = 0;
@@ -165,7 +170,7 @@ dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 }
 
 static void
-dwindle_box(Monitor *m, Workspace *ws, struct wlr_box box)
+dwindle_box(Monitor *m, const Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
 	int n;
@@ -176,7 +181,7 @@ dwindle_box(Monitor *m, Workspace *ws, struct wlr_box box)
 }
 
 static void
-columns_box(Monitor *m, Workspace *ws, struct wlr_box box)
+columns_box(Monitor *m, const Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
 	int g = (int)gappx;
@@ -203,10 +208,10 @@ columns_box(Monitor *m, Workspace *ws, struct wlr_box box)
 }
 
 static void
-tile_box(Monitor *m, Workspace *ws, struct wlr_box box)
+tile_box(Monitor *m, const Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
-	int mw, my, ty;
+	int my, ty;
 	int g = (int)gappx;
 	int mx, mw_final, sx, sw_final;
 
@@ -218,19 +223,17 @@ tile_box(Monitor *m, Workspace *ws, struct wlr_box box)
 	int ns = n - nm;
 
 	if (ns > 0 && nm > 0) {
-		mw = (int)roundf((box.width - g) * m->mfact);
+		int mw = (int)roundf((box.width - g) * m->mfact);
 		mx = box.x + g;
 		mw_final = mw - g - g / 2;
 		sx = box.x + mw + g / 2;
 		sw_final = box.width - mw - g / 2 - g;
 	} else if (nm > 0) {
-		mw = box.width;
 		mx = box.x + g;
 		mw_final = box.width - 2 * g;
 		sx = mx;
 		sw_final = box.width - 2 * g;
 	} else {
-		mw = 0;
 		mx = box.x + g;
 		mw_final = box.width - 2 * g;
 		sx = mx;
@@ -255,7 +258,7 @@ tile_box(Monitor *m, Workspace *ws, struct wlr_box box)
 }
 
 static void
-monocle_box(Monitor *m, Workspace *ws, struct wlr_box box)
+monocle_box(Monitor *m, const Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
 	Client *c;
@@ -278,8 +281,8 @@ monocle_box(Monitor *m, Workspace *ws, struct wlr_box box)
 		wlr_scene_node_raise_to_top(&c->scene->node);
 }
 
-void
-arrange_workspace(Monitor *m, Workspace *ws, struct wlr_box box, const Layout *lt)
+static void
+arrange_workspace(Monitor *m, const Workspace *ws, struct wlr_box box, const Layout *lt)
 {
 	if (!m || !ws || !lt || !lt->arrange)
 		return;
@@ -377,7 +380,7 @@ setmfact(const Arg *arg)
 
 /* Overview Mode Grid Layout Algorithm */
 static int
-get_overview_clients(Monitor *m, Client **leaves, int max)
+get_overview_clients(const Monitor *m, Client **leaves, int max)
 {
 	Client *c;
 	int count = (m && m->active_workspace) ? get_workspace_leaves(m->active_workspace, leaves, max) : 0;
@@ -399,7 +402,7 @@ get_overview_clients(Monitor *m, Client **leaves, int max)
 }
 
 /* Overview Mode Grid Layout Algorithm */
-void
+static void
 overview(Monitor *m)
 {
 	Client *leaves[128];
@@ -491,8 +494,8 @@ destroylabeloverlay(Client *c)
 	c->label = '\0';
 }
 
-void
-clearlabeloverlays(Monitor *m)
+static void
+clearlabeloverlays(const Monitor *m)
 {
 	Client *c;
 	wl_list_for_each(c, &clients, link) {
@@ -501,8 +504,8 @@ clearlabeloverlays(Monitor *m)
 	}
 }
 
-void
-updatelabeloverlays(Monitor *m)
+static void
+updatelabeloverlays(const Monitor *m)
 {
 	Client *leaves[128];
 	int num_labels = (int)strlen(overview_labels);
@@ -620,9 +623,6 @@ focusdir(const Arg *arg)
 	cy = c->geom.y + c->geom.height / 2.0;
 
 	wl_list_for_each(tc, &clients, link) {
-		double wrap_primary = 0, wrap_secondary = 0;
-		double dist, wdist;
-
 		if (tc == c || (selmon->isoverview ? (tc->mon != selmon || (tc->ws && tc->ws->id == SCRATCHPAD_WORKSPACE)) : !VISIBLEON(tc, selmon)))
 			continue;
 
@@ -636,19 +636,21 @@ focusdir(const Arg *arg)
 		dx = tx - cx;
 		dy = ty - cy;
 
+		double dist;
 		if (spatial_direction_match(dx, dy, dir, &dist)) {
 			if (dist < min_dist) {
 				min_dist = dist;
 				best = tc;
 			}
 		} else {
+			double wrap_primary = 0, wrap_secondary = 0;
 			switch (dir) {
 			case WLR_DIRECTION_LEFT: wrap_primary = tx; wrap_secondary = fabs(dy); break;
 			case WLR_DIRECTION_RIGHT: wrap_primary = -tx; wrap_secondary = fabs(dy); break;
 			case WLR_DIRECTION_UP: wrap_primary = ty; wrap_secondary = fabs(dx); break;
 			case WLR_DIRECTION_DOWN: wrap_primary = -ty; wrap_secondary = fabs(dx); break;
 			}
-			wdist = -wrap_primary * 1000.0 + wrap_secondary;
+			double wdist = -wrap_primary * 1000.0 + wrap_secondary;
 			if (wdist < wrap_dist) {
 				wrap_dist = wdist;
 				wrap_best = tc;

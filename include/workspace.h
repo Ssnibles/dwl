@@ -24,8 +24,6 @@ struct Workspace {
 /* Workspace lifecycle & operations */
 Workspace *workspace_create(struct Monitor *m, int id, const char *name);
 void workspace_destroy(Workspace *ws);
-void workspace_switch(Workspace *ws);
-void client_move_to_workspace(struct Client *c, Workspace *ws);
 Workspace *workspace_get_by_id(struct Monitor *m, int id);
 
 #define SCRATCHPAD_WORKSPACE 0
@@ -36,6 +34,6 @@ void move_to_workspace(const Arg *arg);
 void togglescratchpad_client(const Arg *arg);
 void togglescratchpad_view(const Arg *arg);
 
-int scratchpad_client_count(struct Monitor *m);
+int scratchpad_client_count(const struct Monitor *m);
 
 #endif /* WORKSPACE_H */

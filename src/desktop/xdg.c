@@ -19,7 +19,10 @@
 #include "xdg.h"
 #include "client.h"
 #include "config.h"
-#include "util.h"
+static void commitpopup(struct wl_listener *listener, void *data);
+static void destroydecoration(struct wl_listener *listener, void *data);
+static void fullscreennotify(struct wl_listener *listener, void *data);
+static void maximizenotify(struct wl_listener *listener, void *data);
 
 void
 createnotify(struct wl_listener *listener, void *data)
@@ -52,7 +55,7 @@ createpopup(struct wl_listener *listener, void *data)
 	LISTEN_STATIC(&popup->base->surface->events.commit, commitpopup);
 }
 
-void
+static void
 commitpopup(struct wl_listener *listener, void *data)
 {
 	struct wlr_surface *surface = data;
@@ -99,7 +102,7 @@ createdecoration(struct wl_listener *listener, void *data)
 	requestdecorationmode(&c->set_decoration_mode, deco);
 }
 
-void
+static void
 destroydecoration(struct wl_listener *listener, void *data)
 {
 	Client *c = wl_container_of(listener, c, destroy_decoration);
@@ -117,14 +120,14 @@ requestdecorationmode(struct wl_listener *listener, void *data)
 				WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
 }
 
-void
+static void
 fullscreennotify(struct wl_listener *listener, void *data)
 {
 	Client *c = wl_container_of(listener, c, fullscreen);
 	setfullscreen(c, client_wants_fullscreen(c));
 }
 
-void
+static void
 maximizenotify(struct wl_listener *listener, void *data)
 {
 	/* This event is raised when a client would like to maximize itself,

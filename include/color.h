@@ -15,8 +15,6 @@ extern float snap_bg_center[4];
 extern float snap_border_edge[4];
 extern float snap_bg_edge[4];
 
-void init_default_colors(void);
-int parse_hex_color(const char *hex_str, float out[4]);
 void load_color_config(const char *custom_path);
 
 #endif /* COLOR_H */

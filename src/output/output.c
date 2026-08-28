@@ -22,6 +22,12 @@
 #include "config.h"
 #include "util.h"
 
+static void cleanupmon(struct wl_listener *listener, void *data);
+static void closemon(const Monitor *m);
+static void rendermon(struct wl_listener *listener, void *data);
+static void outputmgrapplyortest(struct wlr_output_configuration_v1 *config, int test);
+static void requestmonstate(struct wl_listener *listener, void *data);
+
 void
 createmon(struct wl_listener *listener, void *data)
 {
@@ -108,7 +114,7 @@ createmon(struct wl_listener *listener, void *data)
 		wlr_output_layout_add(output_layout, wlr_output, m->m.x, m->m.y);
 }
 
-void
+static void
 cleanupmon(struct wl_listener *listener, void *data)
 {
 	Monitor *m = wl_container_of(listener, m, destroy);
@@ -117,6 +123,7 @@ cleanupmon(struct wl_listener *listener, void *data)
 
 	/* m->layers[i] are intentionally not unlinked */
 	for (i = 0; i < LENGTH(m->layers); i++) {
+		// cppcheck-suppress unknownMacro
 		wl_list_for_each_safe(l, tmp, &m->layers[i], link)
 			wlr_layer_surface_v1_destroy(l->layer_surface);
 	}
@@ -144,16 +151,17 @@ cleanupmon(struct wl_listener *listener, void *data)
 	free(m);
 }
 
-void
-closemon(Monitor *m)
+static void
+closemon(const Monitor *m)
 {
 	/* update selmon if needed and
 	 * move closed monitor's clients to the focused one */
 	Client *c;
-	int i = 0, nmons = wl_list_length(&mons);
+	int nmons = wl_list_length(&mons);
 	if (!nmons) {
 		selmon = NULL;
 	} else if (m == selmon) {
+		int i = 0;
 		do /* don't switch to disabled mons */
 			selmon = wl_container_of(mons.next, selmon, link);
 		while (!selmon->wlr_output->enabled && i++ < nmons);
@@ -279,7 +287,7 @@ updatemons(struct wl_listener *listener, void *data)
 	wlr_output_manager_v1_set_configuration(output_mgr, config);
 }
 
-void
+static void
 rendermon(struct wl_listener *listener, void *data)
 {
 	/* This function is called every time an output is ready to display a frame,
@@ -316,7 +324,7 @@ outputmgrapply(struct wl_listener *listener, void *data)
 	outputmgrapplyortest(config, 0);
 }
 
-void
+static void
 outputmgrapplyortest(struct wlr_output_configuration_v1 *config, int test)
 {
 	/*
@@ -420,7 +428,7 @@ dirtomon(enum wlr_direction dir)
 	return selmon;
 }
 
-void
+static void
 requestmonstate(struct wl_listener *listener, void *data)
 {
 	struct wlr_output_event_request_state *event = data;

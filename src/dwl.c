@@ -383,6 +383,7 @@ focusclient(Client *c, int lift)
 
 	if ((old_client_type = toplevel_from_wlr_surface(old, &old_c, &old_l)) == XDGShell) {
 		struct wlr_xdg_popup *popup, *tmp;
+		// cppcheck-suppress unknownMacro
 		wl_list_for_each_safe(popup, tmp, &old_c->surface.xdg->popups, link)
 			wlr_xdg_popup_destroy(popup);
 	}

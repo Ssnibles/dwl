@@ -27,7 +27,14 @@
 #include "config.h"
 #include "util.h"
 
-void
+static void keypress(struct wl_listener *listener, void *data);
+static void keypressmod(struct wl_listener *listener, void *data);
+static int keyrepeat(void *data);
+static void createpointer(struct wlr_pointer *pointer);
+static void destroydragicon(struct wl_listener *listener, void *data);
+static void destroyidleinhibitor(struct wl_listener *listener, void *data);
+
+static void
 createkeyboard(struct wlr_keyboard *keyboard)
 {
 	/* Set the keymap to match the group keymap */
@@ -94,7 +101,7 @@ is_modifier_keysym(xkb_keysym_t sym)
 		|| sym == XKB_KEY_Mode_switch;
 }
 
-int
+static int
 keybinding(uint32_t mods, xkb_keysym_t sym)
 {
 	/*
@@ -102,10 +109,9 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 	 * processing keys, rather than passing them on to the client for its own
 	 * processing.
 	 */
-	char target_label = '\0';
-
 	/* Handle ESC / Return / Jump Labels in Overview Mode */
 	if (selmon && selmon->isoverview) {
+		char target_label = '\0';
 		if (sym == XKB_KEY_Escape) {
 			toggleoverview(&(Arg){.i = 0});
 			return 1;
@@ -158,10 +164,9 @@ keybinding(uint32_t mods, xkb_keysym_t sym)
 	return 0;
 }
 
-void
+static void
 keypress(struct wl_listener *listener, void *data)
 {
-	int i;
 	/* This event is raised when a key is pressed or released. */
 	KeyboardGroup *group = wl_container_of(listener, group, key);
 	struct wlr_keyboard_key_event *event = data;
@@ -182,7 +187,7 @@ keypress(struct wl_listener *listener, void *data)
 	/* On _press_ if there is no active screen locker,
 	 * attempt to process a compositor keybinding. */
 	if (!locked && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-		for (i = 0; i < nsyms; i++)
+		for (int i = 0; i < nsyms; i++)
 			handled = keybinding(mods, syms[i]) || handled;
 		if (!handled && (mods & WLR_MODIFIER_SHIFT) && group->wlr_group->keyboard.keymap) {
 			xkb_layout_index_t layout = xkb_state_key_get_layout(
@@ -190,7 +195,7 @@ keypress(struct wl_listener *listener, void *data)
 			const xkb_keysym_t *unshifted_syms;
 			int n_unshifted = xkb_keymap_key_get_syms_by_level(
 					group->wlr_group->keyboard.keymap, keycode, layout, 0, &unshifted_syms);
-			for (i = 0; i < n_unshifted; i++)
+			for (int i = 0; i < n_unshifted; i++)
 				handled = keybinding(mods, unshifted_syms[i]) || handled;
 		}
 		if (!handled && nsyms > 0 && !is_modifier_keysym(syms[0]))
@@ -216,7 +221,7 @@ keypress(struct wl_listener *listener, void *data)
 			event->keycode, event->state);
 }
 
-void
+static void
 keypressmod(struct wl_listener *listener, void *data)
 {
 	/* This event is raised when a modifier key, such as shift or alt, is
@@ -229,18 +234,17 @@ keypressmod(struct wl_listener *listener, void *data)
 			&group->wlr_group->keyboard.modifiers);
 }
 
-int
+static int
 keyrepeat(void *data)
 {
 	KeyboardGroup *group = data;
-	int i;
 	if (!group->nsyms || group->wlr_group->keyboard.repeat_info.rate <= 0)
 		return 0;
 
 	wl_event_source_timer_update(group->key_repeat_source,
 			1000 / group->wlr_group->keyboard.repeat_info.rate);
 
-	for (i = 0; i < group->nsyms; i++)
+	for (int i = 0; i < group->nsyms; i++)
 		keybinding(group->mods, group->keysyms[i]);
 
 	return 0;
@@ -297,7 +301,7 @@ inputdevice(struct wl_listener *listener, void *data)
 	wlr_seat_set_capabilities(seat, caps);
 }
 
-void
+static void
 createpointer(struct wlr_pointer *pointer)
 {
 	struct libinput_device *device;
@@ -367,7 +371,7 @@ startdrag(struct wl_listener *listener, void *data)
 	LISTEN_STATIC(&drag->icon->events.destroy, destroydragicon);
 }
 
-void
+static void
 destroydragicon(struct wl_listener *listener, void *data)
 {
 	/* Focus enter isn't sent during drag, so refocus the focused node. */
@@ -386,7 +390,7 @@ createidleinhibitor(struct wl_listener *listener, void *data)
 	checkidleinhibitor(NULL);
 }
 
-void
+static void
 destroyidleinhibitor(struct wl_listener *listener, void *data)
 {
 	/* `data` is the wlr_surface of the idle inhibitor being destroyed,

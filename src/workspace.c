@@ -57,7 +57,7 @@ workspace_destroy(Workspace *ws)
 Workspace *
 workspace_get_by_id(Monitor *m, int id)
 {
-	Workspace *ws;
+	Workspace *ws = NULL;
 
 	if (!m)
 		return NULL;
@@ -70,7 +70,7 @@ workspace_get_by_id(Monitor *m, int id)
 }
 
 /* Switch active workspace on a monitor and restore keyboard focus */
-void
+static void
 workspace_switch(Workspace *ws)
 {
 	Monitor *m;
@@ -90,7 +90,7 @@ workspace_switch(Workspace *ws)
 }
 
 /* Move client between workspaces and update surface visibility */
-void
+static void
 client_move_to_workspace(Client *c, Workspace *ws)
 {
 	Monitor *old_mon;
@@ -157,7 +157,7 @@ move_to_workspace(const Arg *arg)
 }
 
 int
-scratchpad_client_count(Monitor *m)
+scratchpad_client_count(const Monitor *m)
 {
 	Client *c;
 	int n = 0;
@@ -235,7 +235,6 @@ togglescratchpad_view(const Arg *arg)
 {
 	Workspace *scratch_ws;
 	Client *c, *scratch_c = NULL;
-	Monitor *m;
 
 	if (!selmon)
 		return;
@@ -247,6 +246,7 @@ togglescratchpad_view(const Arg *arg)
 	selmon->scratchpad_showing = !selmon->scratchpad_showing;
 
 	if (selmon->scratchpad_showing) {
+		Monitor *m = NULL;
 		/* Close scratchpad showing on other monitors */
 		wl_list_for_each(m, &mons, link) {
 			if (m != selmon && m->scratchpad_showing) {

@@ -42,6 +42,8 @@ static Client *active_snap_target = NULL;
 
 int in_pointer_focus = 0;
 
+static void destroypointerconstraint(struct wl_listener *listener, void *data);
+
 void
 destroy_snap_overlay(void)
 {
@@ -58,8 +60,6 @@ destroy_snap_overlay(void)
 static inline void
 client_list_swap(Client *a, Client *b)
 {
-	struct wl_list *a_prev, *b_prev;
-
 	if (!a || !b || a == b)
 		return;
 
@@ -70,8 +70,8 @@ client_list_swap(Client *a, Client *b)
 		wl_list_remove(&b->link);
 		wl_list_insert(&a->link, &b->link);
 	} else {
-		a_prev = a->link.prev;
-		b_prev = b->link.prev;
+		struct wl_list *a_prev = a->link.prev;
+		struct wl_list *b_prev = b->link.prev;
 		wl_list_remove(&a->link);
 		wl_list_remove(&b->link);
 		wl_list_insert(b_prev, &a->link);
@@ -240,7 +240,7 @@ buttonpress(struct wl_listener *listener, void *data)
 	in_pointer_focus = 0;
 }
 
-void
+static void
 cursorconstrain(struct wlr_pointer_constraint_v1 *constraint)
 {
 	if (active_constraint == constraint)
@@ -264,15 +264,15 @@ cursorframe(struct wl_listener *listener, void *data)
 	wlr_seat_pointer_notify_frame(seat);
 }
 
-void
+static void
 cursorwarptohint(void)
 {
 	Client *c = NULL;
-	double sx = active_constraint->current.cursor_hint.x;
-	double sy = active_constraint->current.cursor_hint.y;
 
 	toplevel_from_wlr_surface(active_constraint->surface, &c, NULL);
 	if (c && active_constraint->current.cursor_hint.enabled) {
+		double sx = active_constraint->current.cursor_hint.x;
+		double sy = active_constraint->current.cursor_hint.y;
 		wlr_cursor_warp(cursor, NULL, sx + c->geom.x + c->bw, sy + c->geom.y + c->bw);
 		wlr_seat_pointer_warp(active_constraint->seat, sx, sy);
 	}
@@ -476,19 +476,20 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 	} else if (time && cursor_mode == CurResize) {
 		destroy_snap_overlay();
 
+		if (!grabc) {
+			in_pointer_focus = 0;
+			return;
+		}
+
 		if (grabc->isfloating) {
 			int min_w = (int)min_width + 2 * (int)grabc->bw;
 			int min_h = (int)min_height + 2 * (int)grabc->bw;
 			int fixed_left = grabc_start_geom.x;
-			int fixed_right = grabc_start_geom.x + grabc_start_geom.width;
 			int fixed_top = grabc_start_geom.y;
-			int fixed_bottom = grabc_start_geom.y + grabc_start_geom.height;
-			int new_x = grabc->geom.x;
-			int new_y = grabc->geom.y;
-			int new_w = grabc->geom.width;
-			int new_h = grabc->geom.height;
+			int new_x, new_y, new_w, new_h;
 
 			if (grabc_edges & WLR_EDGE_LEFT) {
+				int fixed_right = grabc_start_geom.x + grabc_start_geom.width;
 				new_x = (int)round(cursor->x) - grabcx;
 				if (fixed_right - new_x < min_w)
 					new_x = fixed_right - min_w;
@@ -504,6 +505,7 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 			}
 
 			if (grabc_edges & WLR_EDGE_TOP) {
+				int fixed_bottom = grabc_start_geom.y + grabc_start_geom.height;
 				new_y = (int)round(cursor->y) - grabcy;
 				if (fixed_bottom - new_y < min_h)
 					new_y = fixed_bottom - min_h;
@@ -519,7 +521,7 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 			}
 
 			resize(grabc, (struct wlr_box){.x = new_x, .y = new_y, .width = new_w, .height = new_h}, 1);
-		} else if (grabc && grabc->mon && grabc->mon->lt[grabc->mon->sellt]->arrange) {
+		} else if (grabc->mon && grabc->mon->lt[grabc->mon->sellt]->arrange) {
 			float new_mfact = (float)(cursor->x - grabc->mon->w.x) / (float)grabc->mon->w.width;
 			if (new_mfact >= 0.05f && new_mfact <= 0.95f) {
 				grabc->mon->mfact = new_mfact;
@@ -562,7 +564,7 @@ motionrelative(struct wl_listener *listener, void *data)
 void
 moveresize(const Arg *arg)
 {
-	double norm_x, norm_y, d_left, d_right, d_top, d_bottom;
+	double norm_x, norm_y;
 	const char *cursor_icon;
 
 	if (cursor_mode != CurNormal && cursor_mode != CurPressed)
@@ -606,10 +608,10 @@ moveresize(const Arg *arg)
 
 			if (grabc_edges == WLR_EDGE_NONE) {
 				double min_h, min_v;
-				d_left = fabs(cursor->x - grabc->geom.x);
-				d_right = fabs(cursor->x - (grabc->geom.x + grabc->geom.width));
-				d_top = fabs(cursor->y - grabc->geom.y);
-				d_bottom = fabs(cursor->y - (grabc->geom.y + grabc->geom.height));
+				double d_left = fabs(cursor->x - grabc->geom.x);
+				double d_right = fabs(cursor->x - (grabc->geom.x + grabc->geom.width));
+				double d_top = fabs(cursor->y - grabc->geom.y);
+				double d_bottom = fabs(cursor->y - (grabc->geom.y + grabc->geom.height));
 
 				min_h = MIN(d_left, d_right);
 				min_v = MIN(d_top, d_bottom);
@@ -710,7 +712,7 @@ createpointerconstraint(struct wl_listener *listener, void *data)
 			&pointer_constraint->destroy, destroypointerconstraint);
 }
 
-void
+static void
 destroypointerconstraint(struct wl_listener *listener, void *data)
 {
 	PointerConstraint *pointer_constraint = wl_container_of(listener, pointer_constraint, destroy);

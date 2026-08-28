@@ -23,7 +23,7 @@ applyrules(Client *c)
 				&& (!r->id || strstr(appid, r->id))) {
 			isfloating = r->isfloating;
 			int i = 0;
-			Monitor *m;
+			Monitor *m = NULL;
 			wl_list_for_each(m, &mons, link) {
 				if (r->monitor == i++)
 					mon = m;

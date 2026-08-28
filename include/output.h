@@ -11,15 +11,10 @@
 #include "dwl.h"
 
 void createmon(struct wl_listener *listener, void *data);
-void cleanupmon(struct wl_listener *listener, void *data);
-void closemon(Monitor *m);
 void updatemons(struct wl_listener *listener, void *data);
-void rendermon(struct wl_listener *listener, void *data);
 void outputmgrapply(struct wl_listener *listener, void *data);
-void outputmgrapplyortest(struct wlr_output_configuration_v1 *config, int test);
 void outputmgrtest(struct wl_listener *listener, void *data);
 void powermgrsetmode(struct wl_listener *listener, void *data);
-void requestmonstate(struct wl_listener *listener, void *data);
 Monitor *dirtomon(enum wlr_direction dir);
 
 #endif /* OUTPUT_OUTPUT_H */

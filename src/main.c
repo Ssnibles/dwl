@@ -6,8 +6,8 @@
 int
 main(int argc, char *argv[])
 {
-	char *startup_cmd = NULL;
-	char *color_config_file = NULL;
+	const char *startup_cmd = NULL;
+	const char *color_config_file = NULL;
 	int c;
 
 	while ((c = getopt(argc, argv, "s:c:hdv")) != -1) {

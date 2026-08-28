@@ -124,8 +124,7 @@ extern struct wl_listener start_drag;
 extern struct wl_listener new_session_lock;
 
 void setup(void);
-void run(char *startup_cmd);
+void run(const char *startup_cmd);
 void cleanup(void);
-void cleanuplisteners(void);
 
 #endif /* SERVER_H */

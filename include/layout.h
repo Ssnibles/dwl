@@ -7,22 +7,18 @@
 #include "dwl.h"
 
 void arrange(Monitor *m);
-void arrange_workspace(Monitor *m, Workspace *ws, struct wlr_box box, const Layout *lt);
 void dwindle(Monitor *m);
 void columns(Monitor *m);
 void tile(Monitor *m);
 void monocle(Monitor *m);
-void overview(Monitor *m);
-void focusdir(const Arg *arg);
 void focusstack(const Arg *arg);
 void movestack(const Arg *arg);
 void incnmaster(const Arg *arg);
 void setlayout(const Arg *arg);
 void setmfact(const Arg *arg);
-void clearlabeloverlays(Monitor *m);
 void destroylabeloverlay(Client *c);
 void toggleoverview(const Arg *arg);
-void updatelabeloverlays(Monitor *m);
+void focusdir(const Arg *arg);
 
 static inline const Layout *
 resolve_layout(Client *c, Monitor *m, Workspace **out_ws)

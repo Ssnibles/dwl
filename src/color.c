@@ -30,7 +30,7 @@ copy_color(float dest[4], const float src[4])
 	dest[3] = src[3];
 }
 
-void
+static void
 init_default_colors(void)
 {
 	static const float d_rootcolor[4]          = { 0.10196f, 0.10588f, 0.14902f, 1.00000f };
@@ -56,7 +56,7 @@ init_default_colors(void)
 	copy_color(snap_bg_edge, d_snap_bg_edge);
 }
 
-int
+static int
 parse_hex_color(const char *hex_str, float out[4])
 {
 	if (!hex_str || !out)
@@ -125,7 +125,6 @@ load_color_config(const char *custom_path)
 {
 	FILE *fp = NULL;
 	char pathbuf[512];
-	const char *home, *xdg;
 
 	init_default_colors();
 
@@ -134,8 +133,8 @@ load_color_config(const char *custom_path)
 	}
 
 	if (!fp) {
-		xdg = getenv("XDG_CONFIG_HOME");
-		home = getenv("HOME");
+		const char *xdg = getenv("XDG_CONFIG_HOME");
+		const char *home = getenv("HOME");
 		if (xdg && *xdg) {
 			snprintf(pathbuf, sizeof(pathbuf), "%s/dwl/colors.conf", xdg);
 		} else if (home && *home) {

@@ -48,6 +48,8 @@ KeyboardGroup *kb_group;
 struct wlr_output_layout *output_layout;
 pid_t child_pid = -1;
 
+static void cleanuplisteners(void);
+
 static void
 handlesig(int signo)
 {
@@ -229,7 +231,7 @@ setup(void)
 }
 
 void
-run(char *startup_cmd)
+run(const char *startup_cmd)
 {
 	const char *socket = wl_display_add_socket_auto(dpy);
 	if (!socket)
@@ -296,7 +298,7 @@ cleanup(void)
 	wlr_scene_node_destroy(&scene->tree.node);
 }
 
-void
+static void
 cleanuplisteners(void)
 {
 	wl_list_remove(&cursor_axis.link);

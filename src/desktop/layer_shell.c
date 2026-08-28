@@ -19,6 +19,10 @@
 #include "config.h"
 #include "util.h"
 
+static void commitlayersurfacenotify(struct wl_listener *listener, void *data);
+static void unmaplayersurfacenotify(struct wl_listener *listener, void *data);
+static void destroylayersurfacenotify(struct wl_listener *listener, void *data);
+
 void
 createlayersurface(struct wl_listener *listener, void *data)
 {
@@ -51,14 +55,14 @@ createlayersurface(struct wl_listener *listener, void *data)
 	wlr_surface_send_enter(surface, layer_surface->output);
 }
 
-void
-arrangelayer(Monitor *m, struct wl_list *list, struct wlr_box *usable_area, int exclusive)
+static void
+arrangelayer(const Monitor *m, struct wl_list *list, struct wlr_box *usable_area, int exclusive)
 {
-	LayerSurface *l;
+	LayerSurface *l = NULL;
 	struct wlr_box full_area = m->m;
 
 	wl_list_for_each(l, list, link) {
-		struct wlr_layer_surface_v1 *layer_surface = l->layer_surface;
+		const struct wlr_layer_surface_v1 *layer_surface = l->layer_surface;
 
 		if (!layer_surface->initialized)
 			continue;
@@ -97,7 +101,7 @@ arrangelayers(Monitor *m)
 
 	/* Find topmost keyboard interactive layer, if such a layer exists */
 	for (size_t i = 0; i < LENGTH(layers_above_shell); i++) {
-		LayerSurface *l;
+		LayerSurface *l = NULL;
 		wl_list_for_each_reverse(l, &m->layers[layers_above_shell[i]], link) {
 			if (locked || !l->layer_surface->current.keyboard_interactive || !l->mapped)
 				continue;
@@ -110,7 +114,7 @@ arrangelayers(Monitor *m)
 	}
 }
 
-void
+static void
 commitlayersurfacenotify(struct wl_listener *listener, void *data)
 {
 	LayerSurface *l = wl_container_of(listener, l, surface_commit);
@@ -145,7 +149,7 @@ commitlayersurfacenotify(struct wl_listener *listener, void *data)
 	arrangelayers(l->mon);
 }
 
-void
+static void
 unmaplayersurfacenotify(struct wl_listener *listener, void *data)
 {
 	LayerSurface *l = wl_container_of(listener, l, unmap);
@@ -161,7 +165,7 @@ unmaplayersurfacenotify(struct wl_listener *listener, void *data)
 	motionnotify(0, NULL, 0, 0, 0, 0);
 }
 
-void
+static void
 destroylayersurfacenotify(struct wl_listener *listener, void *data)
 {
 	LayerSurface *l = wl_container_of(listener, l, destroy);
