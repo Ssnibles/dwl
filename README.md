@@ -1,50 +1,50 @@
 # dwl - dwm for Wayland
 
-Personal fork of [dwl](https://codeberg.org/dwl/dwl), customized and packaged as a Nix Flake.
+Personal fork of [dwl](https://codeberg.org/dwl/dwl), customised and packaged as a Nix Flake.
 
 ---
 
 ## Overview
 
-This repository contains a customized build of `dwl` (dwm for Wayland), extending the minimalist Wayland compositor with SceneFX visual enhancements, advanced layout algorithms, spatial window management, and native Nix Flake packaging.
+This repository contains a customised build of `dwl` (dwm for Wayland), extending the minimalist Wayland compositor with SceneFX visual enhancements, advanced layout algorithms, spatial window management, and native Nix Flake packaging.
 
 ---
 
 ## Features
 
 - **Custom Layout Engine**:
-  - **Dwindle (`[\\]`)**: Fibonacci recursive box splitting layout.
-  - **Tile (`[]=`)**: Classic master and stack tiling layout.
-  - **Monocle (`[M]`)**: Fullscreen single-window focus.
-  - **Columns (`|||`)**: Equal vertical column layout.
-  - **Floating (`><>`)**: Manual free-floating window positioning.
+- **Dwindle (`[\\]`)**: Fibonacci recursive box splitting layout.
+- **Tile (`[]=`)**: Classic master and stack tiling layout.
+- **Monocle (`[M]`)**: Fullscreen single-window focus.
+- **Columns (`|||`)**: Equal vertical column layout.
+- **Floating (`><>`)**: Manual free-floating window positioning.
 
 - **Vim Spatial Navigation & Control**:
-  - Intuitive directional focus with `Mod + H/J/K/L` or Arrow keys.
-  - Directional stack shifting with `Mod + Shift + H/J/K/L`.
-  - Master ratio (`mfact`) and client height ratio (`cfact`) dynamic resizing.
+- Intuitive directional focus with `Mod + H/J/K/L` or Arrow keys.
+- Directional stack shifting with `Mod + Shift + H/J/K/L`.
+- Master ratio (`mfact`) and client height ratio (`cfact`) dynamic resizing.
 
 - **Scratchpad Overlay Workspace**:
-  - Persistent overlay scratchpad workspace with distinct background opacity (`Mod + ~` or `Mod + P`).
-  - Seamless toggle and client assignment across displays.
+- Persistent overlay scratchpad workspace with distinct background opacity (`Mod + ~` or `Mod + P`).
+- Seamless toggle and client assignment across displays.
 
 - **Overview Mode**:
-  - Interactive grid overview of active windows with keyboard jump labels (`Mod + O`).
+- Interactive grid overview of active windows with keyboard jump labels (`Mod + O`).
 
 - **Tokyo Night Aesthetic & SceneFX Integration**:
-  - Curated Tokyo Night color palette (`0x1a1b26`).
-  - SceneFX powered rounded corners (`8px`) and configurable window gaps (`8px`).
-  - Distinct snap border and backdrop indicators.
+- Curated Tokyo Night colour palette (`0x1a1b26`).
+- SceneFX powered rounded corners (`8px`) and configurable window gaps (`8px`).
+- Distinct snap border and backdrop indicators.
 
 - **Integrated Hardware & Utility Shortcuts**:
-  - Native WirePlumber (`wpctl`) volume and microphone controls.
-  - `brightnessctl` display backlight adjustment.
-  - `playerctl` media playback control.
-  - Screenshot capture via `grim` and `slurp` with built-in clipboard copying and OCR processing (`tesseract`).
+- Native WirePlumber (`wpctl`) volume and microphone controls.
+- `brightnessctl` display backlight adjustment.
+- `playerctl` media playback control.
+- Screenshot capture via `grim` and `slurp` with built-in clipboard copying and OCR processing (`tesseract`).
 
 - **Nix Flake Package & System Sync**:
-  - Complete `flake.nix` supporting `x86_64-linux` and `aarch64-linux`.
-  - Built-in `dwl-apply` app for zero-friction local NixOS system updates.
+- Complete `flake.nix` supporting `x86_64-linux` and `aarch64-linux`.
+- Built-in `dwl-apply` app for zero-friction local NixOS system updates.
 
 ---
 
@@ -55,17 +55,17 @@ The default modifier key is `MODKEY` (`Super` / `Logo`).
 ### Application Launchers
 
 | Keybinding      | Action                  | Command / Function        |
-| :-------------- | :---------------------- | :------------------------ |
+| --------------- | ----------------------- | ------------------------- |
 | `Mod + Return`  | Launch Terminal         | `foot`                    |
 | `Mod + Space`   | Launch Vicinae Launcher | `vicinae toggle`          |
-| `Mod + D`       | Toggle Command Center   | Quickshell Command Center |
+| `Mod + D`       | Toggle Command Centre   | Quickshell Command Centre |
 | `Mod + Alt + L` | Lock Screen             | Quickshell Lockscreen     |
 | `Mod + E`       | Launch File Manager     | `foot -e yazi`            |
 
 ### Window Management & Layouts
 
 | Keybinding            | Action                                   |
-| :-------------------- | :--------------------------------------- | --- | --- | --- |
+| --------------------- | ---------------------------------------- | --- | --- | --- |
 | `Mod + Q`             | Close focused window                     |
 | `Mod + F`             | Toggle fullscreen state                  |
 | `Mod + V`             | Toggle floating state for focused window |
@@ -80,7 +80,7 @@ The default modifier key is `MODKEY` (`Super` / `Logo`).
 ### Focus & Spatial Navigation
 
 | Keybinding              | Action                     |
-| :---------------------- | :------------------------- |
+| ----------------------- | -------------------------- |
 | `Mod + H / Left`        | Focus window to the left   |
 | `Mod + L / Right`       | Focus window to the right  |
 | `Mod + K / Up`          | Focus window above         |
@@ -93,7 +93,7 @@ The default modifier key is `MODKEY` (`Super` / `Logo`).
 ### Stack & Resizing Controls
 
 | Keybinding                           | Action                                        |
-| :----------------------------------- | :-------------------------------------------- |
+| ------------------------------------ | --------------------------------------------- |
 | `Mod + Shift + H / J / K / L`        | Move window position within stack             |
 | `Mod + Ctrl + H`                     | Decrease master area factor (`mfact -0.05`)   |
 | `Mod + Ctrl + L`                     | Increase master area factor (`mfact +0.05`)   |
@@ -109,7 +109,7 @@ The default modifier key is `MODKEY` (`Super` / `Logo`).
 ### Workspace & Scratchpad
 
 | Keybinding                             | Action                                     |
-| :------------------------------------- | :----------------------------------------- |
+| -------------------------------------- | ------------------------------------------ |
 | `Mod + 1..9`                           | Switch to workspace 1..9                   |
 | `Mod + Shift + 1..9`                   | Move focused window to workspace 1..9      |
 | `Mod + ~` or `Mod + P`                 | Toggle scratchpad overlay view             |
@@ -118,7 +118,7 @@ The default modifier key is `MODKEY` (`Super` / `Logo`).
 ### System & Media Controls
 
 | Keybinding                   | Action                              | Command / Utility            |
-| :--------------------------- | :---------------------------------- | :--------------------------- |
+| ---------------------------- | ----------------------------------- | ---------------------------- |
 | `Print` or `Mod + Shift + S` | Crop Screenshot to Clipboard & File | `grim` + `slurp` + `wl-copy` |
 | `Mod + Ctrl + S`             | OCR Area Screenshot to Clipboard    | `tesseract` + `wl-copy`      |
 | `XF86AudioRaiseVolume`       | Volume Up (+5%)                     | `wpctl`                      |
@@ -155,6 +155,7 @@ Add this repository as an input in your NixOS configuration:
     # Reference inputs.dwl.packages.${pkgs.system}.default in your system or home-manager configuration
   };
 }
+
 ```
 
 ### 2. Local Development & Live Override Workflow
@@ -171,12 +172,14 @@ make apply
 
 # Or via Nix directly:
 nix run .#apply
+
 ```
 
 Alternatively, invoke `nixos-rebuild` with `--override-input`:
 
 ```bash
 sudo nixos-rebuild switch --flake ~/NixConfig#desktop --override-input dwl path:~/dwl
+
 ```
 
 #### Build Local Flake Package:
@@ -184,6 +187,7 @@ sudo nixos-rebuild switch --flake ~/NixConfig#desktop --override-input dwl path:
 ```bash
 cd ~/dwl
 nix build
+
 ```
 
 ---
@@ -210,6 +214,7 @@ make
 
 # Install system-wide
 sudo make install
+
 ```
 
 ---
@@ -222,6 +227,7 @@ To update the remote repository:
 cd ~/dwl
 git remote set-url origin git@github.com:Ssnibles/dwl.git
 git push -u origin main
+
 ```
 
 ---
@@ -243,6 +249,6 @@ git push -u origin main
 
 ---
 
-## License
+## Licence
 
-Distributed under the GPL-3.0 License (inherited from upstream dwl).
+Distributed under the GPL-3.0 Licence (inherited from upstream dwl).
