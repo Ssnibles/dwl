@@ -1,4 +1,4 @@
-# dwl - dwm for Wayland (Ssnibles' Fork)
+# dwl - dwm for Wayland
 
 Personal fork of [dwl](https://codeberg.org/dwl/dwl), customized and packaged as a Nix Flake.
 
@@ -54,83 +54,83 @@ The default modifier key is `MODKEY` (`Super` / `Logo`).
 
 ### Application Launchers
 
-| Keybinding | Action | Command / Function |
-| :--- | :--- | :--- |
-| `Mod + Return` | Launch Terminal | `foot` |
-| `Mod + Space` | Launch Vicinae Launcher | `vicinae toggle` |
-| `Mod + D` | Toggle Command Center | Quickshell Command Center |
-| `Mod + Alt + L` | Lock Screen | Quickshell Lockscreen |
-| `Mod + E` | Launch File Manager | `foot -e yazi` |
+| Keybinding      | Action                  | Command / Function        |
+| :-------------- | :---------------------- | :------------------------ |
+| `Mod + Return`  | Launch Terminal         | `foot`                    |
+| `Mod + Space`   | Launch Vicinae Launcher | `vicinae toggle`          |
+| `Mod + D`       | Toggle Command Center   | Quickshell Command Center |
+| `Mod + Alt + L` | Lock Screen             | Quickshell Lockscreen     |
+| `Mod + E`       | Launch File Manager     | `foot -e yazi`            |
 
 ### Window Management & Layouts
 
-| Keybinding | Action |
-| :--- | :--- |
-| `Mod + Q` | Close focused window |
-| `Mod + F` | Toggle fullscreen state |
-| `Mod + V` | Toggle floating state for focused window |
-| `Mod + Shift + R` | Quit compositor |
-| `Mod + O` | Toggle Overview mode |
-| `Mod + R` | Set layout to Dwindle (`[\\]`) |
-| `Mod + T` | Set layout to Tile (`[]=`) |
-| `Mod + Shift + Space` | Set layout to Floating (`><>`) |
-| `Mod + M` | Set layout to Monocle (`[M]`) |
-| `Mod + C` | Set layout to Columns (`|||`) |
+| Keybinding            | Action                                   |
+| :-------------------- | :--------------------------------------- | --- | --- | --- |
+| `Mod + Q`             | Close focused window                     |
+| `Mod + F`             | Toggle fullscreen state                  |
+| `Mod + V`             | Toggle floating state for focused window |
+| `Mod + Shift + R`     | Quit compositor                          |
+| `Mod + O`             | Toggle Overview mode                     |
+| `Mod + R`             | Set layout to Dwindle (`[\\]`)           |
+| `Mod + T`             | Set layout to Tile (`[]=`)               |
+| `Mod + Shift + Space` | Set layout to Floating (`><>`)           |
+| `Mod + M`             | Set layout to Monocle (`[M]`)            |
+| `Mod + C`             | Set layout to Columns (`                 |     |     | `)  |
 
 ### Focus & Spatial Navigation
 
-| Keybinding | Action |
-| :--- | :--- |
-| `Mod + H / Left` | Focus window to the left |
-| `Mod + L / Right` | Focus window to the right |
-| `Mod + K / Up` | Focus window above |
-| `Mod + J / Down` | Focus window below |
-| `Mod + Alt + H / Left` | Focus monitor to the left |
+| Keybinding              | Action                     |
+| :---------------------- | :------------------------- |
+| `Mod + H / Left`        | Focus window to the left   |
+| `Mod + L / Right`       | Focus window to the right  |
+| `Mod + K / Up`          | Focus window above         |
+| `Mod + J / Down`        | Focus window below         |
+| `Mod + Alt + H / Left`  | Focus monitor to the left  |
 | `Mod + Alt + L / Right` | Focus monitor to the right |
-| `Mod + Alt + K / Up` | Focus monitor above |
-| `Mod + Alt + J / Down` | Focus monitor below |
+| `Mod + Alt + K / Up`    | Focus monitor above        |
+| `Mod + Alt + J / Down`  | Focus monitor below        |
 
 ### Stack & Resizing Controls
 
-| Keybinding | Action |
-| :--- | :--- |
-| `Mod + Shift + H / J / K / L` | Move window position within stack |
-| `Mod + Ctrl + H` | Decrease master area factor (`mfact -0.05`) |
-| `Mod + Ctrl + L` | Increase master area factor (`mfact +0.05`) |
-| `Mod + Ctrl + J` | Decrease client height factor (`cfact -0.25`) |
-| `Mod + Ctrl + K` | Increase client height factor (`cfact +0.25`) |
-| `Mod + Ctrl + -` | Reset client height factor (`cfact`) |
-| `Mod + Ctrl + =` | Reset master area factor (`mfact`) |
-| `Mod + Shift + Return` | Promote focused window to master area |
-| `Mod + Shift + =` | Increase number of windows in master area |
-| `Mod + Shift + -` | Decrease number of windows in master area |
-| `Mod + Shift + Ctrl + H / J / K / L` | Move window to monitor in target direction |
+| Keybinding                           | Action                                        |
+| :----------------------------------- | :-------------------------------------------- |
+| `Mod + Shift + H / J / K / L`        | Move window position within stack             |
+| `Mod + Ctrl + H`                     | Decrease master area factor (`mfact -0.05`)   |
+| `Mod + Ctrl + L`                     | Increase master area factor (`mfact +0.05`)   |
+| `Mod + Ctrl + J`                     | Decrease client height factor (`cfact -0.25`) |
+| `Mod + Ctrl + K`                     | Increase client height factor (`cfact +0.25`) |
+| `Mod + Ctrl + -`                     | Reset client height factor (`cfact`)          |
+| `Mod + Ctrl + =`                     | Reset master area factor (`mfact`)            |
+| `Mod + Shift + Return`               | Promote focused window to master area         |
+| `Mod + Shift + =`                    | Increase number of windows in master area     |
+| `Mod + Shift + -`                    | Decrease number of windows in master area     |
+| `Mod + Shift + Ctrl + H / J / K / L` | Move window to monitor in target direction    |
 
 ### Workspace & Scratchpad
 
-| Keybinding | Action |
-| :--- | :--- |
-| `Mod + 1..9` | Switch to workspace 1..9 |
-| `Mod + Shift + 1..9` | Move focused window to workspace 1..9 |
-| `Mod + ~` or `Mod + P` | Toggle scratchpad overlay view |
+| Keybinding                             | Action                                     |
+| :------------------------------------- | :----------------------------------------- |
+| `Mod + 1..9`                           | Switch to workspace 1..9                   |
+| `Mod + Shift + 1..9`                   | Move focused window to workspace 1..9      |
+| `Mod + ~` or `Mod + P`                 | Toggle scratchpad overlay view             |
 | `Mod + Shift + ~` or `Mod + Shift + P` | Move focused window into/out of scratchpad |
 
 ### System & Media Controls
 
-| Keybinding | Action | Command / Utility |
-| :--- | :--- | :--- |
+| Keybinding                   | Action                              | Command / Utility            |
+| :--------------------------- | :---------------------------------- | :--------------------------- |
 | `Print` or `Mod + Shift + S` | Crop Screenshot to Clipboard & File | `grim` + `slurp` + `wl-copy` |
-| `Mod + Ctrl + S` | OCR Area Screenshot to Clipboard | `tesseract` + `wl-copy` |
-| `XF86AudioRaiseVolume` | Volume Up (+5%) | `wpctl` |
-| `XF86AudioLowerVolume` | Volume Down (-5%) | `wpctl` |
-| `XF86AudioMute` | Toggle Audio Mute | `wpctl` |
-| `XF86AudioMicMute` | Toggle Microphone Mute | `wpctl` |
-| `XF86AudioPlay` | Media Play / Pause | `playerctl` |
-| `XF86AudioNext` | Media Next Track | `playerctl` |
-| `XF86AudioPrev` | Media Previous Track | `playerctl` |
-| `XF86AudioStop` | Media Stop | `playerctl` |
-| `XF86MonBrightnessUp` | Display Brightness Up (+5%) | `brightnessctl` |
-| `XF86MonBrightnessDown` | Display Brightness Down (-5%) | `brightnessctl` |
+| `Mod + Ctrl + S`             | OCR Area Screenshot to Clipboard    | `tesseract` + `wl-copy`      |
+| `XF86AudioRaiseVolume`       | Volume Up (+5%)                     | `wpctl`                      |
+| `XF86AudioLowerVolume`       | Volume Down (-5%)                   | `wpctl`                      |
+| `XF86AudioMute`              | Toggle Audio Mute                   | `wpctl`                      |
+| `XF86AudioMicMute`           | Toggle Microphone Mute              | `wpctl`                      |
+| `XF86AudioPlay`              | Media Play / Pause                  | `playerctl`                  |
+| `XF86AudioNext`              | Media Next Track                    | `playerctl`                  |
+| `XF86AudioPrev`              | Media Previous Track                | `playerctl`                  |
+| `XF86AudioStop`              | Media Stop                          | `playerctl`                  |
+| `XF86MonBrightnessUp`        | Display Brightness Up (+5%)         | `brightnessctl`              |
+| `XF86MonBrightnessDown`      | Display Brightness Down (-5%)       | `brightnessctl`              |
 
 ---
 
