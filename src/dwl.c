@@ -362,6 +362,15 @@ focusclient(Client *c, int lift)
 		wl_list_insert(&fstack, &c->flink);
 		selmon = c->mon;
 		c->isurgent = 0;
+
+		/* If switching focus to a non-fullscreen window on the same workspace, unfullscreen any fullscreen client on that workspace */
+		if (!c->isfullscreen && c->ws && c->mon && !c->mon->isoverview) {
+			Client *w;
+			wl_list_for_each(w, &clients, link) {
+				if (w != c && w->mon == c->mon && w->ws == c->ws && w->isfullscreen && !client_is_ancestor(w, c))
+					setfullscreen(w, 0);
+			}
+		}
 	}
 
 	/* Don't change border color if there is an exclusive focus or we are

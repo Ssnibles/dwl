@@ -184,6 +184,29 @@ client_get_parent(Client *c)
 }
 
 static inline int
+client_is_ancestor(Client *parent, Client *c)
+{
+	while (c) {
+		Client *p = client_get_parent(c);
+		if (p == parent)
+			return 1;
+		c = p;
+	}
+	return 0;
+}
+
+static inline int
+client_has_fullscreen_ancestor(Client *c)
+{
+	while (c) {
+		if (c->isfullscreen)
+			return 1;
+		c = client_get_parent(c);
+	}
+	return 0;
+}
+
+static inline int
 client_has_children(Client *c)
 {
 #ifdef XWAYLAND

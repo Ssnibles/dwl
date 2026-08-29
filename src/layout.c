@@ -40,15 +40,20 @@ arrange(Monitor *m)
 	else
 		strncpy(m->ltsymbol, m->lt[m->sellt]->symbol, LENGTH(m->ltsymbol));
 
-	/* We move all floating clients and scratchpad overlay clients to LyrFloat so they are on top */
+	/* Move clients to appropriate scene graph layers */
 	wl_list_for_each(c, &clients, link) {
 		int on_top;
-		if (c->mon != m || c->scene->node.parent == layers[LyrFS])
+
+		if (c->mon != m)
 			continue;
 
-		on_top = (c->isfloating || (c->ws && c->ws->id == SCRATCHPAD_WORKSPACE)) && !m->isoverview;
-		wlr_scene_node_reparent(&c->scene->node,
-				on_top ? layers[LyrFloat] : layers[LyrTile]);
+		if (!m->isoverview && client_has_fullscreen_ancestor(c)) {
+			wlr_scene_node_reparent(&c->scene->node, layers[LyrFS]);
+		} else {
+			on_top = (c->isfloating || (c->ws && c->ws->id == SCRATCHPAD_WORKSPACE)) && !m->isoverview;
+			wlr_scene_node_reparent(&c->scene->node,
+					on_top ? layers[LyrFloat] : layers[LyrTile]);
+		}
 	}
 
 	if (m->scratchpad_showing && !m->isoverview) {
@@ -68,6 +73,11 @@ arrange(Monitor *m)
 	if (m->isoverview) {
 		overview(m);
 	} else {
+		wl_list_for_each(c, &clients, link) {
+			if (c->mon == m && c->isfullscreen && VISIBLEON(c, m))
+				resize(c, m->m, 0);
+		}
+
 		const Layout *lt;
 		if (m->active_workspace) {
 			lt = resolve_layout(NULL, m, NULL);
@@ -613,7 +623,7 @@ toggleoverview(const Arg *arg)
 
 	if (!selmon->isoverview) {
 		wl_list_for_each(c, &clients, link) {
-			if (c->mon == selmon)
+			if (c->mon == selmon && !c->isfullscreen)
 				c->prev = c->geom;
 		}
 		selmon->overview_prev_client = focustop(selmon);
@@ -627,7 +637,7 @@ toggleoverview(const Arg *arg)
 		selmon->isoverview = 0;
 
 		wl_list_for_each(c, &clients, link) {
-			if (c->mon == selmon && c->isfloating)
+			if (c->mon == selmon && c->isfloating && !c->isfullscreen)
 				resize(c, c->prev, 0);
 		}
 

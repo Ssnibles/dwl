@@ -252,7 +252,7 @@ updatemons(struct wl_listener *listener, void *data)
 		/* Don't move clients to the left output when plugging monitors */
 		arrange(m);
 		/* make sure fullscreen clients have the right size */
-		if ((c = focustop(m)) && c->isfullscreen)
+		if ((c = focustop(m)) && c->isfullscreen && !m->isoverview)
 			resize(c, m->m, 0);
 
 		/* Try to re-set the gamma LUT when updating monitors,
