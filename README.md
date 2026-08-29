@@ -6,30 +6,13 @@ A fork of [dwl](https://codeberg.org/dwl/dwl) packaged as a Nix Flake, featuring
 
 ## Features
 
-- **Layouts**:
-- Dwindle (`[\\]`), Tile (`[]=`), Monocle (`[M]`), Columns (`|||`), and Floating (`><>`).
-
-- **Navigation & Resizing**:
-- Focus and move windows with `Mod + H/J/K/L` or Arrow keys.
-- Adjust master (`mfact`) and client (`cfact`) size ratios.
-
-- **Scratchpad**:
-- Toggle a persistent floating window overlay (`Mod + ~` or `Mod + P`).
-
-- **Overview**:
-- Window grid view with quick-jump keys (`Mod + O`).
-
-- **Visuals**:
-- Tokyo Night colours (`0x1a1b26`), rounded corners (`8px`), and configurable gaps (`8px`) via SceneFX.
-
-- **Shortcuts**:
-- Audio and mic control via `wpctl`.
-- Brightness via `brightnessctl`.
-- Media playback via `playerctl`.
-- Screenshots and OCR via `grim`, `slurp`, and `tesseract`.
-
-- **Nix Support**:
-- Builds on `x86_64-linux` and `aarch64-linux` with a `dwl-apply` script for local updates.
+- **Layouts**: Dwindle (`[\\]`), Tile (`[]=`), Monocle (`[M]`), Columns (`|||`), and Floating (`><>`).
+- **Navigation & Resizing**: Focus/move windows via `Mod + H/J/K/L` or Arrow keys; adjust master (`mfact`) and client (`cfact`) ratios.
+- **Scratchpad**: Toggle a persistent floating window overlay (`Mod + ~` or `Mod + P`).
+- **Overview**: Window grid view with quick-jump keys (`Mod + O`).
+- **Visuals**: Tokyo Night colours (`0x1a1b26`), rounded corners (`8px`), and configurable gaps (`8px`) via SceneFX.
+- **Shortcuts**: Audio/mic (`wpctl`), brightness (`brightnessctl`), media (`playerctl`), screenshots and OCR (`grim`, `slurp`, `tesseract`).
+- **Nix Support**: Builds on `x86_64-linux` and `aarch64-linux` with a `dwl-apply` script for local updates.
 
 ---
 
@@ -40,7 +23,7 @@ Default modifier: `MODKEY` (`Super` / `Logo`).
 ### Launchers
 
 | Keybinding      | Action         | Command                   |
-| --------------- | -------------- | ------------------------- |
+| :-------------- | :------------- | :------------------------ |
 | `Mod + Return`  | Terminal       | `foot`                    |
 | `Mod + Space`   | App Launcher   | `vicinae toggle`          |
 | `Mod + D`       | Command Centre | Quickshell Command Centre |
@@ -49,23 +32,23 @@ Default modifier: `MODKEY` (`Super` / `Logo`).
 
 ### Window Management & Layouts
 
-| Keybinding            | Action                       |
-| --------------------- | ---------------------------- | --- | --- | --- |
-| `Mod + Q`             | Close window                 |
-| `Mod + F`             | Toggle fullscreen            |
-| `Mod + V`             | Toggle floating              |
-| `Mod + Shift + R`     | Quit dwl                     |
-| `Mod + O`             | Toggle Overview              |
-| `Mod + R`             | Set layout: Dwindle (`[\\]`) |
-| `Mod + T`             | Set layout: Tile (`[]=`)     |
-| `Mod + Shift + Space` | Set layout: Floating (`><>`) |
-| `Mod + M`             | Set layout: Monocle (`[M]`)  |
-| `Mod + C`             | Set layout: Columns (`       |     |     | `)  |
+| Keybinding            | Action                         |
+| :-------------------- | :----------------------------- |
+| `Mod + Q`             | Close window                   |
+| `Mod + F`             | Toggle fullscreen              |
+| `Mod + V`             | Toggle floating                |
+| `Mod + Shift + R`     | Quit dwl                       |
+| `Mod + O`             | Toggle Overview                |
+| `Mod + R`             | Set layout: Dwindle (`[\\]`)   |
+| `Mod + T`             | Set layout: Tile (`[]=`)       |
+| `Mod + Shift + Space` | Set layout: Floating (`><>`)   |
+| `Mod + M`             | Set layout: Monocle (`[M]`)    |
+| `Mod + C`             | Set layout: Columns (`\|\|\|`) |
 
 ### Focus & Navigation
 
 | Keybinding              | Action              |
-| ----------------------- | ------------------- |
+| :---------------------- | :------------------ |
 | `Mod + H / Left`        | Focus left          |
 | `Mod + L / Right`       | Focus right         |
 | `Mod + K / Up`          | Focus up            |
@@ -77,24 +60,24 @@ Default modifier: `MODKEY` (`Super` / `Logo`).
 
 ### Sizing & Window Placement
 
-| Keybinding                           | Action                                    |
-| ------------------------------------ | ----------------------------------------- |
-| `Mod + Shift + H / J / K / L`        | Move window in stack                      |
-| `Mod + Ctrl + H`                     | Shrink master area (`mfact -0.05`)        |
-| `Mod + Ctrl + L`                     | Grow master area (`mfact +0.05`)          |
-| `Mod + Ctrl + J`                     | Shrink window height (`cfact -0.25`)      |
-| `Mod + Ctrl + K`                     | Grow window height (`cfact +0.25`)        |
-| `Mod + Ctrl + -`                     | Reset window heights (`cfact`)            |
-| `Mod + Ctrl + =`                     | Reset master area size (`mfact`)          |
-| `Mod + Shift + Return`               | Move window to master area                |
-| `Mod + Shift + =`                    | Add window to master area                 |
-| `Mod + Shift + -`                    | Remove window from master area            |
-| `Mod + Shift + Ctrl + H / J / K / L` | Move window to monitor in given direction |
+| Keybinding                           | Action                                     |
+| :----------------------------------- | :----------------------------------------- |
+| `Mod + Shift + H / J / K / L`        | Move window in stack                       |
+| `Mod + Ctrl + H`                     | Shrink master area (`mfact -0.05`)         |
+| `Mod + Ctrl + L`                     | Grow master area (`mfact +0.05`)           |
+| `Mod + Ctrl + J`                     | Shrink window height (`cfact -0.25`)       |
+| `Mod + Ctrl + K`                     | Grow window height (`cfact +0.25`)         |
+| `Mod + Ctrl + -`                     | Reset window heights (`cfact`)             |
+| `Mod + Ctrl + =`                     | Reset master area size (`mfact`)           |
+| `Mod + Shift + Return`               | Move window to master area                 |
+| `Mod + Shift + =`                    | Add window to master area                  |
+| `Mod + Shift + -`                    | Remove window from master area             |
+| `Mod + Shift + Ctrl + H / J / K / L` | Move window to monitor in target direction |
 
 ### Workspaces & Scratchpad
 
 | Keybinding                             | Action                             |
-| -------------------------------------- | ---------------------------------- |
+| :------------------------------------- | :--------------------------------- |
 | `Mod + 1..9`                           | Go to workspace 1..9               |
 | `Mod + Shift + 1..9`                   | Move window to workspace 1..9      |
 | `Mod + ~` or `Mod + P`                 | Toggle scratchpad                  |
@@ -103,7 +86,7 @@ Default modifier: `MODKEY` (`Super` / `Logo`).
 ### Media & Hardware
 
 | Keybinding                   | Action                           | Command                      |
-| ---------------------------- | -------------------------------- | ---------------------------- |
+| :--------------------------- | :------------------------------- | :--------------------------- |
 | `Print` or `Mod + Shift + S` | Copy and save screenshot snippet | `grim` + `slurp` + `wl-copy` |
 | `Mod + Ctrl + S`             | Copy text from screenshot (OCR)  | `tesseract` + `wl-copy`      |
 | `XF86AudioRaiseVolume`       | Volume +5%                       | `wpctl`                      |
