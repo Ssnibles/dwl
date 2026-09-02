@@ -1,6 +1,6 @@
 # dwl - dwm for Wayland
 
-A fork of [dwl](https://codeberg.org/dwl/dwl) packaged as a Nix Flake, featuring SceneFX, extra layouts, spatial navigation, and desktop shortcuts.
+A fork of [dwl](https://codeberg.org/dwl/dwl) packaged as a Nix Flake. This is mainly just an experiment and trying to learn wlroots and wayland.
 
 ---
 
