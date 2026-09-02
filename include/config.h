@@ -36,12 +36,24 @@ static const Rule rules[] = {
 /* layout(s) */
 static const Layout layouts[] = {
 	/* symbol     arrange function */
-	{ "[\\]",     dwindle },
 	{ "[]=",      tile },
-	{ "><>",      NULL },
+	{ "=[]",      right_tile },
+	{ "|M|",      center_tile },
+	{ "TTT",      vertical_tile },
+	{ "[D]",      deck },
+	{ "VD",       vertical_deck },
 	{ "[M]",      monocle },
+	{ ":::",      grid },
+	{ "VG",       vertical_grid },
+	{ "[\\]",     dwindle },
 	{ "|||",      columns },
+	{ "=#=",      fair },
+	{ "VF",       vertical_fair },
+	{ "[S]",      scroller },
+	{ "VS",       vertical_scroller },
+	{ "><>",      NULL },
 };
+
 
 /* monitors */
 static const MonitorRule monrules[] = {
@@ -134,10 +146,15 @@ static const Key keys[] = {
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_k,           setcfact,         {.f = +0.25f} },
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_minus,       setcfact,         {.f = 0.00f} },
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_equal,       setmfact,         {.f = 0.00f} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_j,           movestack,        {.i = +1} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_k,           movestack,        {.i = -1} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_h,           movestack,        {.i = -1} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_l,           movestack,        {.i = +1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_h,           movestack_dir,    {.i = WLR_DIRECTION_LEFT} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_l,           movestack_dir,    {.i = WLR_DIRECTION_RIGHT} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_k,           movestack_dir,    {.i = WLR_DIRECTION_UP} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_j,           movestack_dir,    {.i = WLR_DIRECTION_DOWN} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Left,        movestack_dir,    {.i = WLR_DIRECTION_LEFT} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Right,       movestack_dir,    {.i = WLR_DIRECTION_RIGHT} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Up,          movestack_dir,    {.i = WLR_DIRECTION_UP} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Down,        movestack_dir,    {.i = WLR_DIRECTION_DOWN} },
+
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Return,      zoom,             {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_equal,       incnmaster,       {.i = +1} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_minus,       incnmaster,       {.i = -1} },
@@ -199,11 +216,21 @@ static const Key keys[] = {
 
 	/* Layout Controls */
 	{ MODKEY,                    XKB_KEY_o,           toggleoverview,   {0} },
-	{ MODKEY,                    XKB_KEY_r,           setlayout,        {.v = &layouts[0]} },
-	{ MODKEY,                    XKB_KEY_t,           setlayout,        {.v = &layouts[1]} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_space,       setlayout,        {.v = &layouts[2]} },
-	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts[3]} },
-	{ MODKEY,                    XKB_KEY_c,           setlayout,        {.v = &layouts[4]} },
+	{ MODKEY,                    XKB_KEY_t,           setlayout,        {.v = &layouts[0]} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           setlayout,        {.v = &layouts[1]} },
+	{ MODKEY,                    XKB_KEY_c,           setlayout,        {.v = &layouts[2]} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_c,           setlayout,        {.v = &layouts[3]} },
+	{ MODKEY,                    XKB_KEY_d,           setlayout,        {.v = &layouts[4]} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_d,           setlayout,        {.v = &layouts[5]} },
+	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts[6]} },
+	{ MODKEY,                    XKB_KEY_g,           setlayout,        {.v = &layouts[7]} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_g,           setlayout,        {.v = &layouts[8]} },
+	{ MODKEY,                    XKB_KEY_r,           setlayout,        {.v = &layouts[9]} },
+	{ MODKEY,                    XKB_KEY_s,           setlayout,        {.v = &layouts[13]} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_s,           setlayout,        {.v = &layouts[14]} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_space,       setlayout,        {.v = &layouts[15]} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_r,           rotatelayout,     {.i = +1} },
+
 
 	/* Screenshots */
 	{ 0,                         XKB_KEY_Print,       spawn,            {.v = ss_crop} },

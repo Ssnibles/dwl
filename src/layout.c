@@ -121,12 +121,12 @@ get_workspace_leaves(const Workspace *ws, Client **leaves, int max)
 }
 
 static void
-dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth)
+dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth, const Workspace *ws)
 {
 	int g = (int)gappx;
 	struct wlr_box b1, b2;
-	int is_horiz;
 	float fact;
+	int dir = ws ? ws->dir : 0; /* 0: Left, 1: Top, 2: Right, 3: Bottom */
 
 	if (count <= 0)
 		return;
@@ -141,58 +141,57 @@ dwindle_recursive(Client **leaves, int count, struct wlr_box box, int depth)
 		return;
 	}
 
-	is_horiz = (depth % 2 == 0);
+	int n1 = count / 2;
+	int n2 = count - n1;
+
+	int split_dir;
+	if (depth == 0) {
+		split_dir = dir;
+	} else if ((dir % 2 == 0 && depth % 2 == 0) || (dir % 2 == 1 && depth % 2 != 0)) {
+		split_dir = (dir % 2 == 0) ? 0 : 1;
+	} else {
+		split_dir = (dir % 2 == 0) ? 1 : 0;
+	}
 
 	if (depth == 0) {
-		fact = selmon ? selmon->mfact : 0.5f;
-	} else if (is_horiz) {
-		fact = 0.5f;
+		fact = (ws && ws->mfact > 0) ? ws->mfact : (selmon ? selmon->mfact : 0.5f);
 	} else {
-		float cfirst = leaves[0]->cfact > 0 ? leaves[0]->cfact : 1.0f;
-		float crest_sum = 0.0f;
-		for (int i = 1; i < count; i++)
-			crest_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
-		float crest_avg = crest_sum / (count - 1);
-		fact = cfirst / (cfirst + crest_avg);
+		float cfirst = 0.0f, crest = 0.0f;
+		for (int i = 0; i < n1; i++)
+			cfirst += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+		for (int i = n1; i < count; i++)
+			crest += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+		fact = (cfirst > 0 && crest > 0) ? (cfirst / (cfirst + crest)) : 0.5f;
 		if (fact < 0.1f) fact = 0.1f;
 		if (fact > 0.9f) fact = 0.9f;
 	}
 
-	if (is_horiz) {
-		int w = (int)roundf((float)(box.width - g) * fact);
-		w = MAX(1, MIN(box.width - g - 1, w));
-		b1 = (struct wlr_box){
-			.x = box.x + g,
-			.y = box.y + g,
-			.width = w,
-			.height = MAX(1, box.height - 2 * g)
-		};
-		b2 = (struct wlr_box){
-			.x = box.x + g + w,
-			.y = box.y,
-			.width = MAX(1, box.width - w - g),
-			.height = box.height
-		};
-	} else {
-		int h = (int)roundf((float)(box.height - g) * fact);
-		h = MAX(1, MIN(box.height - g - 1, h));
-		b1 = (struct wlr_box){
-			.x = box.x + g,
-			.y = box.y + g,
-			.width = MAX(1, box.width - 2 * g),
-			.height = h
-		};
-		b2 = (struct wlr_box){
-			.x = box.x,
-			.y = box.y + g + h,
-			.width = box.width,
-			.height = MAX(1, box.height - h - g)
-		};
+	if (split_dir == 0) { /* Left: b1 on left, b2 on right */
+		int w = (int)roundf((float)(box.width + g) * fact);
+		w = MAX(1, MIN(box.width - 1, w));
+		b1 = (struct wlr_box){ .x = box.x, .y = box.y, .width = w, .height = box.height };
+		b2 = (struct wlr_box){ .x = box.x + w - g, .y = box.y, .width = MAX(1, box.width - w + g), .height = box.height };
+	} else if (split_dir == 1) { /* Top: b1 on top, b2 on bottom */
+		int h = (int)roundf((float)(box.height + g) * fact);
+		h = MAX(1, MIN(box.height - 1, h));
+		b1 = (struct wlr_box){ .x = box.x, .y = box.y, .width = box.width, .height = h };
+		b2 = (struct wlr_box){ .x = box.x, .y = box.y + h - g, .width = box.width, .height = MAX(1, box.height - h + g) };
+	} else if (split_dir == 2) { /* Right: b1 on right, b2 on left */
+		int w = (int)roundf((float)(box.width + g) * fact);
+		w = MAX(1, MIN(box.width - 1, w));
+		b1 = (struct wlr_box){ .x = box.x + box.width - w, .y = box.y, .width = w, .height = box.height };
+		b2 = (struct wlr_box){ .x = box.x, .y = box.y, .width = MAX(1, box.width - w + g), .height = box.height };
+	} else { /* Bottom: b1 on bottom, b2 on top */
+		int h = (int)roundf((float)(box.height + g) * fact);
+		h = MAX(1, MIN(box.height - 1, h));
+		b1 = (struct wlr_box){ .x = box.x, .y = box.y + box.height - h, .width = box.width, .height = h };
+		b2 = (struct wlr_box){ .x = box.x, .y = box.y, .width = box.width, .height = MAX(1, box.height - h + g) };
 	}
 
-	resize(leaves[0], b1, 0);
-	dwindle_recursive(leaves + 1, count - 1, b2, depth + 1);
+	dwindle_recursive(leaves, n1, b1, depth + 1, ws);
+	dwindle_recursive(leaves + n1, n2, b2, depth + 1, ws);
 }
+
 
 static void
 dwindle_box(Monitor *m, const Workspace *ws, struct wlr_box box)
@@ -202,7 +201,399 @@ dwindle_box(Monitor *m, const Workspace *ws, struct wlr_box box)
 	(void)m;
 	n = get_workspace_leaves(ws, leaves, 128);
 	if (n > 0)
-		dwindle_recursive(leaves, n, box, 0);
+		dwindle_recursive(leaves, n, box, 0, ws);
+}
+
+static void
+right_tile_box(Monitor *m, const Workspace *ws, struct wlr_box box)
+{
+	Client *leaves[128];
+	int g = (int)gappx;
+	int n = get_workspace_leaves(ws, leaves, 128);
+	if (n == 0) return;
+
+	int ws_nmaster = ws ? ws->nmaster : m->nmaster;
+	float ws_mfact = ws ? ws->mfact : m->mfact;
+	int nm = MIN(n, ws_nmaster);
+	int ns = n - nm;
+
+	float mfact_sum = 0.0f, sfact_sum = 0.0f;
+	for (int i = 0; i < n; i++) {
+		if (i < nm) mfact_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+		else sfact_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+	}
+	if (mfact_sum <= 0.0f) mfact_sum = 1.0f;
+	if (sfact_sum <= 0.0f) sfact_sum = 1.0f;
+
+	int mx, mw_final, sx, sw_final;
+	if (ns > 0 && nm > 0) {
+		int mw = (int)roundf((box.width - g) * ws_mfact);
+		sx = box.x + g;
+		sw_final = box.width - mw - g / 2 - g;
+		mx = box.x + box.width - mw + g / 2;
+		mw_final = mw - g - g / 2;
+	} else {
+		mx = sx = box.x + g;
+		mw_final = sw_final = box.width - 2 * g;
+	}
+
+	int my = 0, ty = 0;
+	for (int i = 0; i < n; i++) {
+		Client *c = leaves[i];
+		float cf = c->cfact > 0 ? c->cfact : 1.0f;
+		if (i < nm) {
+			int avail_h = box.height - g * (nm + 1);
+			int h = (i == nm - 1) ? (box.height - my - g * 2) : (int)roundf(avail_h * (cf / mfact_sum));
+			h = MAX(1, h);
+			resize(c, (struct wlr_box){.x = mx, .y = box.y + my + g, .width = mw_final, .height = h}, 0);
+			my += h + g;
+		} else {
+			int avail_h = box.height - g * (ns + 1);
+			int h = (i == n - 1) ? (box.height - ty - g * 2) : (int)roundf(avail_h * (cf / sfact_sum));
+			h = MAX(1, h);
+			resize(c, (struct wlr_box){.x = sx, .y = box.y + ty + g, .width = sw_final, .height = h}, 0);
+			ty += h + g;
+		}
+	}
+}
+
+static void
+center_tile_box(Monitor *m, const Workspace *ws, struct wlr_box box)
+{
+	Client *leaves[128];
+	int g = (int)gappx;
+	int n = get_workspace_leaves(ws, leaves, 128);
+	if (n == 0) return;
+
+	int ws_nmaster = ws ? ws->nmaster : m->nmaster;
+	float ws_mfact = ws ? ws->mfact : m->mfact;
+	int nm = MIN(n, ws_nmaster);
+	int ns = n - nm;
+
+	if (ns <= 0) {
+		int mw = (int)roundf((box.width - 2 * g) * ws_mfact);
+		int mx = box.x + (box.width - mw) / 2;
+		int my = 0;
+		float mfact_sum = 0.0f;
+		for (int i = 0; i < nm; i++)
+			mfact_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+		if (mfact_sum <= 0.0f) mfact_sum = 1.0f;
+
+		for (int i = 0; i < nm; i++) {
+			Client *c = leaves[i];
+			float cf = c->cfact > 0 ? c->cfact : 1.0f;
+			int avail_h = box.height - g * (nm + 1);
+			int h = (i == nm - 1) ? (box.height - my - g * 2) : (int)roundf(avail_h * (cf / mfact_sum));
+			h = MAX(1, h);
+			resize(c, (struct wlr_box){.x = mx, .y = box.y + my + g, .width = mw, .height = h}, 0);
+			my += h + g;
+		}
+		return;
+	}
+
+	int mw = (int)roundf((box.width - 2 * g) * ws_mfact);
+	mw = MAX(100, MIN(box.width - 4 * g - 100, mw));
+
+	int left_count = (ns + 1) / 2;
+	int right_count = ns - left_count;
+
+	int tw = (right_count > 0) ? (box.width - mw - 4 * g) / 2 : (box.width - mw - 3 * g);
+	tw = MAX(1, tw);
+	int mx = (right_count > 0) ? (box.x + g + tw + g) : (box.x + box.width - mw - g);
+
+	float mfact_sum = 0.0f, lfact_sum = 0.0f, rfact_sum = 0.0f;
+	int l_idx = 0, r_idx = 0;
+	for (int i = 0; i < n; i++) {
+		float cf = leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+		if (i < nm) {
+			mfact_sum += cf;
+		} else {
+			int s_i = i - nm;
+			if (s_i % 2 == 0) lfact_sum += cf;
+			else rfact_sum += cf;
+		}
+	}
+	if (mfact_sum <= 0.0f) mfact_sum = 1.0f;
+	if (lfact_sum <= 0.0f) lfact_sum = 1.0f;
+	if (rfact_sum <= 0.0f) rfact_sum = 1.0f;
+
+	int my = 0, ly = 0, ry = 0;
+	for (int i = 0; i < n; i++) {
+		Client *c = leaves[i];
+		float cf = c->cfact > 0 ? c->cfact : 1.0f;
+		if (i < nm) {
+			int avail_h = box.height - g * (nm + 1);
+			int h = (i == nm - 1) ? (box.height - my - g * 2) : (int)roundf(avail_h * (cf / mfact_sum));
+			h = MAX(1, h);
+			resize(c, (struct wlr_box){.x = mx, .y = box.y + my + g, .width = mw, .height = h}, 0);
+			my += h + g;
+		} else {
+			int s_i = i - nm;
+			if (s_i % 2 == 0) {
+				int avail_h = box.height - g * (left_count + 1);
+				int h = (l_idx == left_count - 1) ? (box.height - ly - g * 2) : (int)roundf(avail_h * (cf / lfact_sum));
+				h = MAX(1, h);
+				resize(c, (struct wlr_box){.x = box.x + g, .y = box.y + ly + g, .width = tw, .height = h}, 0);
+				ly += h + g;
+				l_idx++;
+			} else {
+				int avail_h = box.height - g * (right_count + 1);
+				int h = (r_idx == right_count - 1) ? (box.height - ry - g * 2) : (int)roundf(avail_h * (cf / rfact_sum));
+				h = MAX(1, h);
+				resize(c, (struct wlr_box){.x = box.x + box.width - tw - g, .y = box.y + ry + g, .width = tw, .height = h}, 0);
+				ry += h + g;
+				r_idx++;
+			}
+		}
+	}
+}
+
+static void
+vertical_tile_box(Monitor *m, const Workspace *ws, struct wlr_box box)
+{
+	Client *leaves[128];
+	int g = (int)gappx;
+	int n = get_workspace_leaves(ws, leaves, 128);
+	if (n == 0) return;
+
+	int ws_nmaster = ws ? ws->nmaster : m->nmaster;
+	float ws_mfact = ws ? ws->mfact : m->mfact;
+	int nm = MIN(n, ws_nmaster);
+	int ns = n - nm;
+
+	float mfact_sum = 0.0f, sfact_sum = 0.0f;
+	for (int i = 0; i < n; i++) {
+		if (i < nm) mfact_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+		else sfact_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+	}
+	if (mfact_sum <= 0.0f) mfact_sum = 1.0f;
+	if (sfact_sum <= 0.0f) sfact_sum = 1.0f;
+
+	int my, mh_final, sy, sh_final;
+	if (ns > 0 && nm > 0) {
+		int mh = (int)roundf((box.height - g) * ws_mfact);
+		my = box.y + g;
+		mh_final = mh - g - g / 2;
+		sy = box.y + mh + g / 2;
+		sh_final = box.height - mh - g / 2 - g;
+	} else {
+		my = sy = box.y + g;
+		mh_final = sh_final = box.height - 2 * g;
+	}
+
+	int mx = 0, tx = 0;
+	for (int i = 0; i < n; i++) {
+		Client *c = leaves[i];
+		float cf = c->cfact > 0 ? c->cfact : 1.0f;
+		if (i < nm) {
+			int avail_w = box.width - g * (nm + 1);
+			int w = (i == nm - 1) ? (box.width - mx - g * 2) : (int)roundf(avail_w * (cf / mfact_sum));
+			w = MAX(1, w);
+			resize(c, (struct wlr_box){.x = box.x + mx + g, .y = my, .width = w, .height = mh_final}, 0);
+			mx += w + g;
+		} else {
+			int avail_w = box.width - g * (ns + 1);
+			int w = (i == n - 1) ? (box.width - tx - g * 2) : (int)roundf(avail_w * (cf / sfact_sum));
+			w = MAX(1, w);
+			resize(c, (struct wlr_box){.x = box.x + tx + g, .y = sy, .width = w, .height = sh_final}, 0);
+			tx += w + g;
+		}
+	}
+}
+
+static void
+deck_box(Monitor *m, const Workspace *ws, struct wlr_box box)
+{
+	Client *leaves[128];
+	Client *c;
+	int g = (int)gappx;
+	int n = get_workspace_leaves(ws, leaves, 128);
+	if (n == 0) return;
+
+	int ws_nmaster = ws ? ws->nmaster : m->nmaster;
+	float ws_mfact = ws ? ws->mfact : m->mfact;
+	int nm = MIN(n, ws_nmaster);
+	int ns = n - nm;
+
+	int mw = (ns > 0 && nm > 0) ? (int)roundf((box.width - g) * ws_mfact) : box.width - g;
+
+	float mfact_sum = 0.0f;
+	for (int i = 0; i < nm; i++)
+		mfact_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+	if (mfact_sum <= 0.0f) mfact_sum = 1.0f;
+
+	int my = 0;
+	for (int i = 0; i < n; i++) {
+		c = leaves[i];
+		if (i < nm) {
+			int avail_h = box.height - g * (nm + 1);
+			int h = (i == nm - 1) ? (box.height - my - g * 2) : (int)roundf(avail_h * (c->cfact > 0 ? c->cfact : 1.0f) / mfact_sum);
+			h = MAX(1, h);
+			resize(c, (struct wlr_box){.x = box.x + g, .y = box.y + my + g, .width = MAX(1, mw - g - g / 2), .height = h}, 0);
+			my += h + g;
+		} else {
+			struct wlr_box sbox = {
+				.x = box.x + mw + g / 2,
+				.y = box.y + g,
+				.width = MAX(1, box.width - mw - g / 2 - g),
+				.height = MAX(1, box.height - 2 * g)
+			};
+			resize(c, sbox, 0);
+		}
+	}
+	if ((c = focustop(m)))
+		wlr_scene_node_raise_to_top(&c->scene->node);
+}
+
+static void
+vertical_deck_box(Monitor *m, const Workspace *ws, struct wlr_box box)
+{
+	Client *leaves[128];
+	Client *c;
+	int g = (int)gappx;
+	int n = get_workspace_leaves(ws, leaves, 128);
+	if (n == 0) return;
+
+	int ws_nmaster = ws ? ws->nmaster : m->nmaster;
+	float ws_mfact = ws ? ws->mfact : m->mfact;
+	int nm = MIN(n, ws_nmaster);
+	int ns = n - nm;
+
+	int mh = (ns > 0 && nm > 0) ? (int)roundf((box.height - g) * ws_mfact) : box.height - g;
+
+	float mfact_sum = 0.0f;
+	for (int i = 0; i < nm; i++)
+		mfact_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
+	if (mfact_sum <= 0.0f) mfact_sum = 1.0f;
+
+	int mx = 0;
+	for (int i = 0; i < n; i++) {
+		c = leaves[i];
+		if (i < nm) {
+			int avail_w = box.width - g * (nm + 1);
+			int w = (i == nm - 1) ? (box.width - mx - g * 2) : (int)roundf(avail_w * (c->cfact > 0 ? c->cfact : 1.0f) / mfact_sum);
+			w = MAX(1, w);
+			resize(c, (struct wlr_box){.x = box.x + mx + g, .y = box.y + g, .width = w, .height = MAX(1, mh - g - g / 2)}, 0);
+			mx += w + g;
+		} else {
+			struct wlr_box sbox = {
+				.x = box.x + g,
+				.y = box.y + mh + g / 2,
+				.width = MAX(1, box.width - 2 * g),
+				.height = MAX(1, box.height - mh - g / 2 - g)
+			};
+			resize(c, sbox, 0);
+		}
+	}
+	if ((c = focustop(m)))
+		wlr_scene_node_raise_to_top(&c->scene->node);
+}
+
+static void
+grid_box(Monitor *m, const Workspace *ws, struct wlr_box box)
+{
+	Client *leaves[128];
+	int g = (int)gappx;
+	(void)m;
+
+	int n = get_workspace_leaves(ws, leaves, 128);
+	if (n == 0)
+		return;
+
+	if (n == 1) {
+		int cw = (int)((box.width - 2 * g) * 0.90f);
+		int ch = (int)((box.height - 2 * g) * 0.90f);
+		resize(leaves[0], (struct wlr_box){
+			.x = box.x + (box.width - cw) / 2,
+			.y = box.y + (box.height - ch) / 2,
+			.width = MAX(1, cw),
+			.height = MAX(1, ch)
+		}, 0);
+		return;
+	}
+
+	if (n == 2) {
+		int cw = (box.width - 3 * g) / 2;
+		int ch = (int)((box.height - 2 * g) * 0.65f);
+		int cy = box.y + (box.height - ch) / 2;
+		resize(leaves[0], (struct wlr_box){.x = box.x + g, .y = cy, .width = MAX(1, cw), .height = MAX(1, ch)}, 0);
+		resize(leaves[1], (struct wlr_box){.x = box.x + g + cw + g, .y = cy, .width = MAX(1, cw), .height = MAX(1, ch)}, 0);
+		return;
+	}
+
+	int cols = (int)ceil(sqrt((double)n));
+	int rows = (n + cols - 1) / cols;
+
+	int cell_w = (box.width - g * (cols + 1)) / cols;
+	int cell_h = (box.height - g * (rows + 1)) / rows;
+	cell_w = MAX(1, cell_w);
+	cell_h = MAX(1, cell_h);
+
+	for (int i = 0; i < n; i++) {
+		int r = i / cols;
+		int c = i % cols;
+		int x, y;
+
+		if (r == rows - 1 && n % cols != 0) {
+			int overcols = n % cols;
+			int last_row_w = overcols * cell_w + (overcols - 1) * g;
+			int offset_x = (box.width - last_row_w) / 2;
+			x = box.x + offset_x + c * (cell_w + g);
+		} else {
+			x = box.x + g + c * (cell_w + g);
+		}
+		y = box.y + g + r * (cell_h + g);
+
+		resize(leaves[i], (struct wlr_box){
+			.x = x,
+			.y = y,
+			.width = cell_w,
+			.height = cell_h
+		}, 0);
+	}
+}
+
+static void
+vertical_grid_box(Monitor *m, const Workspace *ws, struct wlr_box box)
+{
+	Client *leaves[128];
+	int g = (int)gappx;
+	(void)m;
+
+	int n = get_workspace_leaves(ws, leaves, 128);
+	if (n == 0)
+		return;
+
+	int rows = (int)ceil(sqrt((double)n));
+	int cols = (n + rows - 1) / rows;
+
+	int cell_w = (box.width - g * (cols + 1)) / cols;
+	int cell_h = (box.height - g * (rows + 1)) / rows;
+	cell_w = MAX(1, cell_w);
+	cell_h = MAX(1, cell_h);
+
+	for (int i = 0; i < n; i++) {
+		int c = i / rows;
+		int r = i % rows;
+		int x, y;
+
+		if (c == cols - 1 && n % rows != 0) {
+			int overrows = n % rows;
+			int last_col_h = overrows * cell_h + (overrows - 1) * g;
+			int offset_y = (box.height - last_col_h) / 2;
+			y = box.y + offset_y + r * (cell_h + g);
+		} else {
+			y = box.y + g + r * (cell_h + g);
+		}
+		x = box.x + g + c * (cell_w + g);
+
+		resize(leaves[i], (struct wlr_box){
+			.x = x,
+			.y = y,
+			.width = cell_w,
+			.height = cell_h
+		}, 0);
+	}
 }
 
 static void
@@ -233,39 +624,227 @@ columns_box(Monitor *m, const Workspace *ws, struct wlr_box box)
 }
 
 static void
+fair_box(Monitor *m, const Workspace *ws, struct wlr_box box)
+{
+	Client *leaves[128];
+	int g = (int)gappx;
+	(void)m;
+
+	int n = get_workspace_leaves(ws, leaves, 128);
+	if (n == 0) return;
+
+	int cols = (int)ceil(sqrt((double)n));
+	int rows = (n + cols - 1) / cols;
+
+	int avail_w = box.width - g * (cols + 1);
+	int avail_h = box.height - g * (rows + 1);
+
+	for (int i = 0; i < n; i++) {
+		int r = i / cols;
+		int c = i % cols;
+
+		int w = avail_w / cols;
+		int h = avail_h / rows;
+
+		int x = box.x + g + c * (w + g);
+		int y = box.y + g + r * (h + g);
+
+		resize(leaves[i], (struct wlr_box){.x = x, .y = y, .width = MAX(1, w), .height = MAX(1, h)}, 0);
+	}
+}
+
+static void
+vertical_fair_box(Monitor *m, const Workspace *ws, struct wlr_box box)
+{
+	Client *leaves[128];
+	int g = (int)gappx;
+	(void)m;
+
+	int n = get_workspace_leaves(ws, leaves, 128);
+	if (n == 0) return;
+
+	int rows = (int)ceil(sqrt((double)n));
+	int cols = (n + rows - 1) / rows;
+
+	int avail_w = box.width - g * (cols + 1);
+	int avail_h = box.height - g * (rows + 1);
+
+	for (int i = 0; i < n; i++) {
+		int c = i / rows;
+		int r = i % rows;
+
+		int w = avail_w / cols;
+		int h = avail_h / rows;
+
+		int x = box.x + g + c * (w + g);
+		int y = box.y + g + r * (h + g);
+
+		resize(leaves[i], (struct wlr_box){.x = x, .y = y, .width = MAX(1, w), .height = MAX(1, h)}, 0);
+	}
+}
+
+static void
+scroller_box(Monitor *m, const Workspace *ws, struct wlr_box box)
+{
+	Client *leaves[128];
+	int g = (int)gappx;
+	int n = get_workspace_leaves(ws, leaves, 128);
+	if (n == 0) return;
+
+	float ws_mfact = ws ? ws->mfact : m->mfact;
+	Client *sel = focustop(m);
+	int sel_idx = -1;
+	for (int i = 0; i < n; i++) {
+		if (leaves[i] == sel) {
+			sel_idx = i;
+			break;
+		}
+	}
+	if (sel_idx < 0) sel_idx = 0;
+
+	if (n == 1) {
+		int w = (int)((box.width - 2 * g) * ws_mfact);
+		resize(leaves[0], (struct wlr_box){
+			.x = box.x + (box.width - w) / 2,
+			.y = box.y + g,
+			.width = MAX(1, w),
+			.height = MAX(1, box.height - 2 * g)
+		}, 0);
+		return;
+	}
+
+	int main_w = (int)((box.width - 2 * g) * ws_mfact);
+	int side_w = MAX(50, (box.width - main_w - 3 * g) / 2);
+	int main_x = box.x + (box.width - main_w) / 2;
+
+	resize(leaves[sel_idx], (struct wlr_box){
+		.x = main_x,
+		.y = box.y + g,
+		.width = MAX(1, main_w),
+		.height = MAX(1, box.height - 2 * g)
+	}, 0);
+
+	int left_count = sel_idx;
+	if (left_count > 0) {
+		int lx = main_x - g - side_w;
+		for (int i = sel_idx - 1; i >= 0; i--) {
+			resize(leaves[i], (struct wlr_box){
+				.x = lx,
+				.y = box.y + g,
+				.width = MAX(1, side_w),
+				.height = MAX(1, box.height - 2 * g)
+			}, 0);
+			lx -= (side_w + g);
+		}
+	}
+
+	int right_count = n - sel_idx - 1;
+	if (right_count > 0) {
+		int rx = main_x + main_w + g;
+		for (int i = sel_idx + 1; i < n; i++) {
+			resize(leaves[i], (struct wlr_box){
+				.x = rx,
+				.y = box.y + g,
+				.width = MAX(1, side_w),
+				.height = MAX(1, box.height - 2 * g)
+			}, 0);
+			rx += (side_w + g);
+		}
+	}
+	if (sel)
+		wlr_scene_node_raise_to_top(&sel->scene->node);
+}
+
+static void
+vertical_scroller_box(Monitor *m, const Workspace *ws, struct wlr_box box)
+{
+	Client *leaves[128];
+	int g = (int)gappx;
+	int n = get_workspace_leaves(ws, leaves, 128);
+	if (n == 0) return;
+
+	float ws_mfact = ws ? ws->mfact : m->mfact;
+	Client *sel = focustop(m);
+	int sel_idx = -1;
+	for (int i = 0; i < n; i++) {
+		if (leaves[i] == sel) {
+			sel_idx = i;
+			break;
+		}
+	}
+	if (sel_idx < 0) sel_idx = 0;
+
+	if (n == 1) {
+		int h = (int)((box.height - 2 * g) * ws_mfact);
+		resize(leaves[0], (struct wlr_box){
+			.x = box.x + g,
+			.y = box.y + (box.height - h) / 2,
+			.width = MAX(1, box.width - 2 * g),
+			.height = MAX(1, h)
+		}, 0);
+		return;
+	}
+
+	int main_h = (int)((box.height - 2 * g) * ws_mfact);
+	int side_h = MAX(50, (box.height - main_h - 3 * g) / 2);
+	int main_y = box.y + (box.height - main_h) / 2;
+
+	resize(leaves[sel_idx], (struct wlr_box){
+		.x = box.x + g,
+		.y = main_y,
+		.width = MAX(1, box.width - 2 * g),
+		.height = MAX(1, main_h)
+	}, 0);
+
+	int top_count = sel_idx;
+	if (top_count > 0) {
+		int ty = main_y - g - side_h;
+		for (int i = sel_idx - 1; i >= 0; i--) {
+			resize(leaves[i], (struct wlr_box){
+				.x = box.x + g,
+				.y = ty,
+				.width = MAX(1, box.width - 2 * g),
+				.height = MAX(1, side_h)
+			}, 0);
+			ty -= (side_h + g);
+		}
+	}
+
+	int bottom_count = n - sel_idx - 1;
+	if (bottom_count > 0) {
+		int by = main_y + main_h + g;
+		for (int i = sel_idx + 1; i < n; i++) {
+			resize(leaves[i], (struct wlr_box){
+				.x = box.x + g,
+				.y = by,
+				.width = MAX(1, box.width - 2 * g),
+				.height = MAX(1, side_h)
+			}, 0);
+			by += (side_h + g);
+		}
+	}
+	if (sel)
+		wlr_scene_node_raise_to_top(&sel->scene->node);
+}
+
+static void
 tile_box(Monitor *m, const Workspace *ws, struct wlr_box box)
 {
 	Client *leaves[128];
-	int my, ty;
 	int g = (int)gappx;
-	int mx, mw_final, sx, sw_final;
-	float mfact_sum = 0.0f, sfact_sum = 0.0f;
+	int dir = ws ? ws->dir : 0;
 
 	int n = get_workspace_leaves(ws, leaves, 128);
 	if (n == 0)
 		return;
 
-	int nm = MIN(n, m->nmaster);
+	int ws_nmaster = ws ? ws->nmaster : m->nmaster;
+	float ws_mfact = ws ? ws->mfact : m->mfact;
+
+	int nm = MIN(n, ws_nmaster);
 	int ns = n - nm;
 
-	if (ns > 0 && nm > 0) {
-		int mw = (int)roundf((box.width - g) * m->mfact);
-		mx = box.x + g;
-		mw_final = mw - g - g / 2;
-		sx = box.x + mw + g / 2;
-		sw_final = box.width - mw - g / 2 - g;
-	} else if (nm > 0) {
-		mx = box.x + g;
-		mw_final = box.width - 2 * g;
-		sx = mx;
-		sw_final = box.width - 2 * g;
-	} else {
-		mx = box.x + g;
-		mw_final = box.width - 2 * g;
-		sx = mx;
-		sw_final = mw_final;
-	}
-
+	float mfact_sum = 0.0f, sfact_sum = 0.0f;
 	for (int i = 0; i < n; i++) {
 		if (i < nm)
 			mfact_sum += leaves[i]->cfact > 0 ? leaves[i]->cfact : 1.0f;
@@ -275,22 +854,81 @@ tile_box(Monitor *m, const Workspace *ws, struct wlr_box box)
 	if (mfact_sum <= 0.0f) mfact_sum = 1.0f;
 	if (sfact_sum <= 0.0f) sfact_sum = 1.0f;
 
-	my = ty = 0;
-	for (int i = 0; i < n; i++) {
-		Client *c = leaves[i];
-		float cf = c->cfact > 0 ? c->cfact : 1.0f;
-		if (i < nm) {
-			int avail_h = box.height - g * (nm + 1);
-			int h = (i == nm - 1) ? (box.height - my - g * 2) : (int)roundf(avail_h * (cf / mfact_sum));
-			h = MAX(1, h);
-			resize(c, (struct wlr_box){.x = mx, .y = box.y + my + g, .width = mw_final, .height = h}, 0);
-			my += h + g;
+	if (dir == 0 || dir == 2) {
+		int mx, mw_final, sx, sw_final;
+		if (ns > 0 && nm > 0) {
+			int mw = (int)roundf((box.width - g) * ws_mfact);
+			if (dir == 0) {
+				mx = box.x + g;
+				mw_final = mw - g - g / 2;
+				sx = box.x + mw + g / 2;
+				sw_final = box.width - mw - g / 2 - g;
+			} else {
+				sx = box.x + g;
+				sw_final = box.width - mw - g / 2 - g;
+				mx = box.x + box.width - mw + g / 2;
+				mw_final = mw - g - g / 2;
+			}
 		} else {
-			int avail_h = box.height - g * (ns + 1);
-			int h = (i == n - 1) ? (box.height - ty - g * 2) : (int)roundf(avail_h * (cf / sfact_sum));
-			h = MAX(1, h);
-			resize(c, (struct wlr_box){.x = sx, .y = box.y + ty + g, .width = sw_final, .height = h}, 0);
-			ty += h + g;
+			mx = sx = box.x + g;
+			mw_final = sw_final = box.width - 2 * g;
+		}
+
+		int my = 0, ty = 0;
+		for (int i = 0; i < n; i++) {
+			Client *c = leaves[i];
+			float cf = c->cfact > 0 ? c->cfact : 1.0f;
+			if (i < nm) {
+				int avail_h = box.height - g * (nm + 1);
+				int h = (i == nm - 1) ? (box.height - my - g * 2) : (int)roundf(avail_h * (cf / mfact_sum));
+				h = MAX(1, h);
+				resize(c, (struct wlr_box){.x = mx, .y = box.y + my + g, .width = mw_final, .height = h}, 0);
+				my += h + g;
+			} else {
+				int avail_h = box.height - g * (ns + 1);
+				int h = (i == n - 1) ? (box.height - ty - g * 2) : (int)roundf(avail_h * (cf / sfact_sum));
+				h = MAX(1, h);
+				resize(c, (struct wlr_box){.x = sx, .y = box.y + ty + g, .width = sw_final, .height = h}, 0);
+				ty += h + g;
+			}
+		}
+	} else {
+		int my, mh_final, sy, sh_final;
+		if (ns > 0 && nm > 0) {
+			int mh = (int)roundf((box.height - g) * ws_mfact);
+			if (dir == 1) {
+				my = box.y + g;
+				mh_final = mh - g - g / 2;
+				sy = box.y + mh + g / 2;
+				sh_final = box.height - mh - g / 2 - g;
+			} else {
+				sy = box.y + g;
+				sh_final = box.height - mh - g / 2 - g;
+				my = box.y + box.height - mh + g / 2;
+				mh_final = mh - g - g / 2;
+			}
+		} else {
+			my = sy = box.y + g;
+			mh_final = sh_final = box.height - 2 * g;
+		}
+
+		int mx = 0, tx = 0;
+		for (int i = 0; i < n; i++) {
+			Client *c = leaves[i];
+			float cf = c->cfact > 0 ? c->cfact : 1.0f;
+			if (i < nm) {
+				int avail_w = box.width - g * (nm + 1);
+				int w = (i == nm - 1) ? (box.width - mx - g * 2) : (int)roundf(avail_w * (cf / mfact_sum));
+				w = MAX(1, w);
+				resize(c, (struct wlr_box){.x = box.x + mx + g, .y = my, .width = w, .height = mh_final}, 0);
+				mx += w + g;
+			} else {
+				int avail_w = box.width - g * (ns + 1);
+				int w = (i == n - 1) ? (box.width - tx - g * 2) : (int)roundf(avail_w * (cf / sfact_sum));
+				w = MAX(1, w);
+				resize(c, (struct wlr_box){.x = box.x + tx + g, .y = sy, .width = w, .height = sh_final}, 0);
+				tx += w + g;
+			}
 		}
 	}
 }
@@ -327,14 +965,106 @@ arrange_workspace(Monitor *m, const Workspace *ws, struct wlr_box box, const Lay
 
 	if (lt->arrange == tile)
 		tile_box(m, ws, box);
+	else if (lt->arrange == right_tile)
+		right_tile_box(m, ws, box);
+	else if (lt->arrange == center_tile)
+		center_tile_box(m, ws, box);
+	else if (lt->arrange == vertical_tile)
+		vertical_tile_box(m, ws, box);
+	else if (lt->arrange == deck)
+		deck_box(m, ws, box);
+	else if (lt->arrange == vertical_deck)
+		vertical_deck_box(m, ws, box);
 	else if (lt->arrange == monocle)
 		monocle_box(m, ws, box);
+	else if (lt->arrange == grid)
+		grid_box(m, ws, box);
+	else if (lt->arrange == vertical_grid)
+		vertical_grid_box(m, ws, box);
 	else if (lt->arrange == dwindle)
 		dwindle_box(m, ws, box);
 	else if (lt->arrange == columns)
 		columns_box(m, ws, box);
+	else if (lt->arrange == fair)
+		fair_box(m, ws, box);
+	else if (lt->arrange == vertical_fair)
+		vertical_fair_box(m, ws, box);
+	else if (lt->arrange == scroller)
+		scroller_box(m, ws, box);
+	else if (lt->arrange == vertical_scroller)
+		vertical_scroller_box(m, ws, box);
 	else
 		lt->arrange(m);
+}
+
+void
+right_tile(Monitor *m)
+{
+	if (m && m->active_workspace)
+		right_tile_box(m, m->active_workspace, m->w);
+}
+
+void
+center_tile(Monitor *m)
+{
+	if (m && m->active_workspace)
+		center_tile_box(m, m->active_workspace, m->w);
+}
+
+void
+vertical_tile(Monitor *m)
+{
+	if (m && m->active_workspace)
+		vertical_tile_box(m, m->active_workspace, m->w);
+}
+
+void
+deck(Monitor *m)
+{
+	if (m && m->active_workspace)
+		deck_box(m, m->active_workspace, m->w);
+}
+
+void
+vertical_deck(Monitor *m)
+{
+	if (m && m->active_workspace)
+		vertical_deck_box(m, m->active_workspace, m->w);
+}
+
+void
+vertical_grid(Monitor *m)
+{
+	if (m && m->active_workspace)
+		vertical_grid_box(m, m->active_workspace, m->w);
+}
+
+void
+fair(Monitor *m)
+{
+	if (m && m->active_workspace)
+		fair_box(m, m->active_workspace, m->w);
+}
+
+void
+vertical_fair(Monitor *m)
+{
+	if (m && m->active_workspace)
+		vertical_fair_box(m, m->active_workspace, m->w);
+}
+
+void
+scroller(Monitor *m)
+{
+	if (m && m->active_workspace)
+		scroller_box(m, m->active_workspace, m->w);
+}
+
+void
+vertical_scroller(Monitor *m)
+{
+	if (m && m->active_workspace)
+		vertical_scroller_box(m, m->active_workspace, m->w);
 }
 
 void
@@ -342,6 +1072,13 @@ dwindle(Monitor *m)
 {
 	if (m && m->active_workspace)
 		dwindle_box(m, m->active_workspace, m->w);
+}
+
+void
+grid(Monitor *m)
+{
+	if (m && m->active_workspace)
+		grid_box(m, m->active_workspace, m->w);
 }
 
 void
@@ -365,11 +1102,43 @@ monocle(Monitor *m)
 		monocle_box(m, m->active_workspace, m->w);
 }
 
+
+void
+setlayoutdir(const Arg *arg)
+{
+	Workspace *ws;
+	if (!selmon || !arg)
+		return;
+	ws = selmon->active_workspace;
+	if (ws) {
+		ws->dir = (arg->i % 4 + 4) % 4;
+		arrange(selmon);
+	}
+}
+
+void
+rotatelayout(const Arg *arg)
+{
+	Workspace *ws;
+	if (!selmon)
+		return;
+	ws = selmon->active_workspace;
+	if (ws) {
+		int delta = arg ? arg->i : 1;
+		ws->dir = (ws->dir + delta + 4) % 4;
+		arrange(selmon);
+	}
+}
+
 void
 incnmaster(const Arg *arg)
 {
+	Workspace *ws;
 	if (!arg || !selmon)
 		return;
+	ws = selmon->active_workspace;
+	if (ws)
+		ws->nmaster = MAX(ws->nmaster + arg->i, 0);
 	selmon->nmaster = MAX(selmon->nmaster + arg->i, 0);
 	arrange(selmon);
 }
@@ -406,17 +1175,25 @@ void
 setmfact(const Arg *arg)
 {
 	float f;
+	Workspace *ws;
 
 	if (!arg || !selmon || !selmon->lt[selmon->sellt]->arrange)
 		return;
+
+	ws = selmon->active_workspace;
+	float cur_mfact = (ws && ws->mfact > 0) ? ws->mfact : selmon->mfact;
+
 	if (arg->f == 0.0f) {
+		if (ws) ws->mfact = 0.55f;
 		selmon->mfact = 0.55f;
 		arrange(selmon);
 		return;
 	}
-	f = arg->f < 1.0f ? arg->f + selmon->mfact : arg->f - 1.0f;
+	f = arg->f < 1.0f ? arg->f + cur_mfact : arg->f - 1.0f;
 	if (f < 0.1f || f > 0.9f)
 		return;
+	if (ws)
+		ws->mfact = f;
 	selmon->mfact = f;
 	arrange(selmon);
 }
@@ -812,3 +1589,59 @@ movestack(const Arg *arg)
 	}
 	arrange(selmon);
 }
+
+void
+movestack_dir(const Arg *arg)
+{
+	Client *c = focustop(selmon);
+	Client *best = NULL, *tc;
+	double cx, cy, tx, ty, dx, dy;
+	double min_dist = 1e18;
+	int dir = arg->i;
+
+	if (!selmon || !c || c->isfloating)
+		return;
+
+	cx = c->geom.x + c->geom.width / 2.0;
+	cy = c->geom.y + c->geom.height / 2.0;
+
+	wl_list_for_each(tc, &clients, link) {
+		if (tc == c || !tc->ws || tc->ws != c->ws || !VISIBLEON(tc, selmon) || tc->isfloating)
+			continue;
+
+		tx = tc->geom.x + tc->geom.width / 2.0;
+		ty = tc->geom.y + tc->geom.height / 2.0;
+		dx = tx - cx;
+		dy = ty - cy;
+
+		double dist;
+		if (spatial_direction_match(dx, dy, dir, &dist)) {
+			if (dist < min_dist) {
+				min_dist = dist;
+				best = tc;
+			}
+		}
+	}
+
+	if (best) {
+		struct wl_list *c_prev = c->link.prev;
+		struct wl_list *b_prev = best->link.prev;
+
+		if (c_prev == &best->link) {
+			wl_list_remove(&c->link);
+			wl_list_insert(&best->link, &c->link);
+		} else if (b_prev == &c->link) {
+			wl_list_remove(&best->link);
+			wl_list_insert(&c->link, &best->link);
+		} else {
+			wl_list_remove(&c->link);
+			wl_list_remove(&best->link);
+			wl_list_insert(b_prev, &c->link);
+			wl_list_insert(c_prev, &best->link);
+		}
+		arrange(selmon);
+	} else {
+		movestack(arg);
+	}
+}
+

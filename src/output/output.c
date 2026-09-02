@@ -41,6 +41,8 @@ createmon(struct wl_listener *listener, void *data)
 
 	Monitor *m = wlr_output->data = ecalloc(1, sizeof(*m));
 	m->wlr_output = wlr_output;
+	m->mfact = 0.55f;
+	m->nmaster = 1;
 	wl_list_init(&m->workspaces);
 	workspace_create(m, SCRATCHPAD_WORKSPACE, "0");
 	for (size_t i = 1; i <= 9; i++) {
@@ -66,6 +68,12 @@ createmon(struct wl_listener *listener, void *data)
 			wlr_output_state_set_transform(&state, r->rr);
 			break;
 		}
+	}
+
+	Workspace *ws_iter;
+	wl_list_for_each(ws_iter, &m->workspaces, link) {
+		ws_iter->mfact = m->mfact;
+		ws_iter->nmaster = m->nmaster;
 	}
 
 	/* The mode is a tuple of (width, height, refresh rate), and each

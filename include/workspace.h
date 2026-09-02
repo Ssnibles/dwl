@@ -18,6 +18,9 @@ struct Workspace {
 	char name[32];              /* Display name (e.g., "1", "2") */
 	struct Monitor *mon;        /* Parent monitor pointer */
 	const Layout *layout;       /* Active layout algorithm */
+	float mfact;                /* Master area size factor */
+	int nmaster;                /* Number of master windows */
+	int dir;                    /* Layout orientation: 0=Left, 1=Top, 2=Right, 3=Bottom */
 	struct wl_list link;        /* Linked list entry in Monitor->workspaces */
 };
 

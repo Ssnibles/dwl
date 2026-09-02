@@ -7,13 +7,29 @@
 #include "dwl.h"
 
 void arrange(Monitor *m);
+void tile(Monitor *m);
+void right_tile(Monitor *m);
+void center_tile(Monitor *m);
+void vertical_tile(Monitor *m);
+void deck(Monitor *m);
+void vertical_deck(Monitor *m);
+void monocle(Monitor *m);
+void grid(Monitor *m);
+void vertical_grid(Monitor *m);
 void dwindle(Monitor *m);
 void columns(Monitor *m);
-void tile(Monitor *m);
-void monocle(Monitor *m);
+void fair(Monitor *m);
+void vertical_fair(Monitor *m);
+void scroller(Monitor *m);
+void vertical_scroller(Monitor *m);
+
 void focusstack(const Arg *arg);
 void movestack(const Arg *arg);
+void movestack_dir(const Arg *arg);
+
 void incnmaster(const Arg *arg);
+void setlayoutdir(const Arg *arg);
+void rotatelayout(const Arg *arg);
 void setlayout(const Arg *arg);
 void setmfact(const Arg *arg);
 void setcfact(const Arg *arg);

@@ -29,6 +29,9 @@ workspace_create(Monitor *m, int id, const char *name)
 
 	ws->mon = m;
 	ws->layout = &layouts[0];
+	ws->mfact = (m && m->mfact > 0) ? m->mfact : 0.55f;
+	ws->nmaster = (m && m->nmaster > 0) ? m->nmaster : 1;
+	ws->dir = 0;
 	wl_list_init(&ws->link);
 	wl_list_insert(m->workspaces.prev, &ws->link);
 

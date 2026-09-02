@@ -527,6 +527,9 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 			if (grabc_edges & (WLR_EDGE_LEFT | WLR_EDGE_RIGHT)) {
 				float new_mfact = (float)(cursor->x - grabc->mon->w.x) / (float)grabc->mon->w.width;
 				if (new_mfact >= 0.05f && new_mfact <= 0.95f) {
+					Workspace *ws = grabc->ws ? grabc->ws : grabc->mon->active_workspace;
+					if (ws)
+						ws->mfact = new_mfact;
 					grabc->mon->mfact = new_mfact;
 					changed = 1;
 				}
